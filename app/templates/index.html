@@ -4,310 +4,545 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Spool Tag Writer</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0%25' stop-color='%232196F3'/%3E%3Cstop offset='100%25' stop-color='%2300BCD4'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='14' fill='%23181a20'/%3E%3Ccircle cx='32' cy='32' r='20' fill='none' stroke='url(%23g)' stroke-width='3'/%3E%3Ccircle cx='32' cy='32' r='13' fill='none' stroke='url(%23g)' stroke-width='2.5' stroke-dasharray='6 4'/%3E%3Ccircle cx='32' cy='32' r='5' fill='url(%23g)'/%3E%3Cpath d='M48 12l4 4-8 8-4-4z' fill='%2300BCD4' opacity='.7'/%3E%3C/svg%3E" />
   <style>
     :root {
-      --bg: #f4efe6;
-      --paper: #fffdf9;
-      --ink: #1c1a17;
-      --muted: #6f665b;
-      --line: #d9cebf;
-      --accent: #166534;
-      --danger: #b42318;
+      --bg-base: #121218;
+      --bg-surface: #1e1e2a;
+      --bg-card: #252533;
+      --bg-input: #1a1a26;
+      --text-primary: #e0e0ec;
+      --text-secondary: #8888a0;
+      --text-muted: #5c5c72;
+      --border: #2e2e40;
+      --border-hover: #3e3e56;
+      --accent: #2196F3;
+      --accent-hover: #42a5f5;
+      --accent-glow: rgba(33, 150, 243, 0.15);
+      --success: #4caf50;
+      --success-hover: #66bb6a;
+      --warning: #ff9800;
+      --warning-hover: #ffa726;
+      --danger: #f44336;
+      --danger-hover: #ef5350;
+      --info: #00bcd4;
+      --radius: 8px;
+      --radius-lg: 12px;
+      --shadow: 0 2px 8px rgba(0,0,0,0.3);
+      --transition: 150ms ease;
     }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
     body {
-      margin: 0;
-      font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
-      background: radial-gradient(circle at 10% 10%, #fff7e7, var(--bg));
-      color: var(--ink);
+      font-family: -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: var(--bg-base);
+      color: var(--text-primary);
+      line-height: 1.5;
+      min-height: 100vh;
     }
-    .wrap {
-      max-width: 920px;
-      margin: 2rem auto;
-      padding: 1rem;
-    }
-    .card {
-      background: var(--paper);
-      border: 1px solid var(--line);
-      border-radius: 12px;
-      padding: 1rem;
-      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
-      margin-bottom: 1rem;
-    }
-    h1, h2 {
-      margin-top: 0;
-      font-family: "Space Grotesk", "Segoe UI", sans-serif;
-    }
-    .muted {
-      color: var(--muted);
-      margin-top: -0.5rem;
-    }
-    select, button {
-      font: inherit;
-      padding: 0.6rem 0.8rem;
-      border-radius: 8px;
-      border: 1px solid var(--line);
-    }
-    input {
-      font: inherit;
-      padding: 0.5rem 0.65rem;
-      border-radius: 8px;
-      border: 1px solid var(--line);
-      width: 100%;
-      box-sizing: border-box;
-    }
-    label {
-      font-size: 0.95rem;
-      display: block;
-    }
-    button {
-      cursor: pointer;
-      font-weight: 600;
-    }
-    .actions {
+
+    /* ── Toolbar ── */
+    .toolbar {
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 1.25rem;
+      height: 48px;
       display: flex;
-      gap: 0.6rem;
-      flex-wrap: wrap;
-      margin-top: 0.8rem;
+      align-items: center;
+      gap: 0.75rem;
+      position: sticky;
+      top: 0;
+      z-index: 100;
     }
-    .preview-btn {
-      background: #fff;
+    .toolbar-logo {
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
     }
-    .write-btn {
-      background: var(--accent);
-      color: #fff;
-      border-color: var(--accent);
-    }
-    .read-btn {
-      background: #eef6ff;
-      border-color: #b9d7f5;
-      color: #0f3d66;
-    }
-    .phone-btn {
-      background: #fff3e8;
-      border-color: #f2c48d;
-      color: #8a3b12;
-    }
-    .error {
-      color: var(--danger);
+    .toolbar-title {
+      font-size: 1rem;
       font-weight: 600;
-      margin: 0;
+      color: var(--text-primary);
+      letter-spacing: 0.02em;
     }
-    .status {
-      margin: 0.75rem 0 0;
-      font-size: 0.95rem;
-      color: var(--muted);
+    .toolbar-meta {
+      margin-left: auto;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      display: flex;
+      gap: 1rem;
     }
-    .status.error {
-      color: var(--danger);
+    .toolbar-meta span {
+      display: flex;
+      align-items: center;
+      gap: 0.3rem;
     }
-    .hidden {
-      display: none;
+    .toolbar-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--success);
+      display: inline-block;
     }
-    .video {
-      width: 100%;
-      max-width: 360px;
-      border-radius: 12px;
-      border: 1px solid var(--line);
-      background: #000;
-      margin-top: 0.8rem;
-    }
-    pre {
-      white-space: pre-wrap;
-      word-break: break-word;
-      background: #f8f5ef;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      padding: 0.75rem;
-      margin: 0;
-      overflow-x: auto;
-    }
-    .grid {
+
+    /* ── Layout ── */
+    .container {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 1rem;
       display: grid;
       grid-template-columns: 1fr;
       gap: 1rem;
     }
-    @media (min-width: 900px) {
-      .grid {
+    @media (min-width: 960px) {
+      .container {
+        grid-template-columns: 1fr 1fr;
+        padding: 1.25rem;
+      }
+      .full-width {
+        grid-column: 1 / -1;
+      }
+    }
+
+    /* ── Card ── */
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+    }
+    .card-header {
+      padding: 0.65rem 1rem;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      background: rgba(255,255,255,0.02);
+    }
+    .card-header .icon {
+      font-size: 1rem;
+      line-height: 1;
+    }
+    .card-body {
+      padding: 1rem;
+    }
+
+    /* ── Form elements ── */
+    label {
+      display: block;
+      font-size: 0.78rem;
+      font-weight: 500;
+      color: var(--text-secondary);
+      margin-bottom: 0.25rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    select, input[type="text"], input[type="number"], input {
+      font: inherit;
+      font-size: 0.875rem;
+      width: 100%;
+      padding: 0.5rem 0.65rem;
+      background: var(--bg-input);
+      color: var(--text-primary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      outline: none;
+      transition: border-color var(--transition);
+    }
+    select:focus, input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px var(--accent-glow);
+    }
+    select {
+      cursor: pointer;
+    }
+    select option {
+      background: var(--bg-surface);
+      color: var(--text-primary);
+    }
+    ::placeholder {
+      color: var(--text-muted);
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 0.6rem;
+      margin-top: 0.75rem;
+    }
+    @media (min-width: 600px) {
+      .form-grid {
+        grid-template-columns: repeat(4, 1fr);
+      }
+    }
+    .form-group {
+      display: flex;
+      flex-direction: column;
+    }
+    .form-full {
+      grid-column: 1 / -1;
+    }
+
+    .hint {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      margin-top: 0.5rem;
+    }
+
+    /* ── Buttons ── */
+    .actions {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      margin-top: 0.75rem;
+    }
+    button, .btn {
+      font: inherit;
+      font-size: 0.8rem;
+      font-weight: 600;
+      padding: 0.45rem 0.85rem;
+      border-radius: var(--radius);
+      border: 1px solid transparent;
+      cursor: pointer;
+      transition: background var(--transition), border-color var(--transition), box-shadow var(--transition);
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      line-height: 1.4;
+    }
+    .btn-primary {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+    }
+    .btn-primary:hover { background: var(--accent-hover); }
+    .btn-success {
+      background: var(--success);
+      color: #fff;
+      border-color: var(--success);
+    }
+    .btn-success:hover { background: var(--success-hover); }
+    .btn-warning {
+      background: var(--warning);
+      color: #1a1a1a;
+      border-color: var(--warning);
+    }
+    .btn-warning:hover { background: var(--warning-hover); }
+    .btn-outline {
+      background: transparent;
+      color: var(--text-primary);
+      border-color: var(--border);
+    }
+    .btn-outline:hover {
+      border-color: var(--border-hover);
+      background: rgba(255,255,255,0.04);
+    }
+    .btn-info {
+      background: var(--info);
+      color: #fff;
+      border-color: var(--info);
+    }
+    .btn-info:hover { background: #26c6da; }
+
+    /* ── Status / messages ── */
+    .status {
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+      margin-top: 0.6rem;
+      min-height: 1.2em;
+    }
+    .status.error {
+      color: var(--danger);
+    }
+    .error-banner {
+      background: rgba(244,67,54,0.1);
+      border: 1px solid rgba(244,67,54,0.3);
+      border-radius: var(--radius);
+      padding: 0.6rem 0.85rem;
+      color: var(--danger);
+      font-size: 0.85rem;
+      font-weight: 500;
+      margin-bottom: 0.75rem;
+    }
+
+    /* ── Pre/code blocks ── */
+    pre {
+      white-space: pre-wrap;
+      word-break: break-word;
+      background: var(--bg-base);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 0.75rem;
+      margin: 0;
+      overflow-x: auto;
+      font-family: "JetBrains Mono", "Fira Code", "Cascadia Code", monospace;
+      font-size: 0.78rem;
+      line-height: 1.6;
+      color: var(--text-primary);
+    }
+
+    /* ── Video ── */
+    .video {
+      width: 100%;
+      max-width: 320px;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      background: #000;
+      margin-top: 0.6rem;
+    }
+
+    /* ── Misc ── */
+    .hidden { display: none !important; }
+
+    .meta {
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+      margin-bottom: 0.5rem;
+    }
+
+    .result-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 0.75rem;
+      margin-top: 0.75rem;
+    }
+    @media (min-width: 700px) {
+      .result-grid {
         grid-template-columns: 1fr 1fr;
       }
     }
-    .meta {
-      font-size: 0.95rem;
-      color: var(--muted);
-      margin-bottom: 0.6rem;
+    .result-panel {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 0.75rem;
     }
-    .form-grid {
-      display: grid;
-      grid-template-columns: repeat(1, minmax(0, 1fr));
-      gap: 0.6rem;
-      margin-top: 1rem;
+    .result-panel h3 {
+      font-size: 0.78rem;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin-bottom: 0.5rem;
     }
-    @media (min-width: 900px) {
-      .form-grid {
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-      }
+
+    .divider {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 0.75rem 0;
     }
-    .hint {
-      font-size: 0.9rem;
-      color: var(--muted);
-      margin-top: 0.5rem;
-      margin-bottom: 0;
-    }
+
+    /* ── Scrollbar ── */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: var(--bg-base); }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--border-hover); }
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <div class="card">
-      <h1>Spoolman -> ACR122U Tag Writer</h1>
-      <p class="muted">
-        Backend: <strong>{{ settings.nfc_backend }}</strong>,
-        Reader filter: <strong>{{ settings.nfc_reader_name }}</strong>
-      </p>
-      {% if error %}
-        <p class="error">{{ error }}</p>
-      {% endif %}
-      <form method="post">
-        <label for="spool_id">Select spool</label><br />
-        <select name="spool_id" id="spool_id" required>
-          {% for spool in spools %}
-            <option value="{{ spool.id }}" {% if selected_spool_id == spool.id %}selected{% endif %}>
-              {{ spool_label(spool) }}
-            </option>
-          {% endfor %}
-        </select>
-        <div class="form-grid">
-          <label>Type
-            <input id="type" name="type" value="{{ overrides_form.type }}" placeholder="e.g. PLA" />
-          </label>
-          <label>Brand
-            <input id="brand" name="brand" value="{{ overrides_form.brand }}" placeholder="e.g. Spectrum" />
-          </label>
-          <label>Subtype
-            <input id="subtype" name="subtype" value="{{ overrides_form.subtype }}" placeholder="e.g. Wood" />
-          </label>
-          <label>Min temp [C]
-            <input id="min_temp" name="min_temp" value="{{ overrides_form.min_temp }}" placeholder="e.g. 190" />
-          </label>
-          <label>Max temp [C]
-            <input id="max_temp" name="max_temp" value="{{ overrides_form.max_temp }}" placeholder="e.g. 220" />
-          </label>
-          <label>Bed min temp [C]
-            <input id="bed_min_temp" name="bed_min_temp" value="{{ overrides_form.bed_min_temp }}" placeholder="e.g. 50" />
-          </label>
-          <label>Bed max temp [C]
-            <input id="bed_max_temp" name="bed_max_temp" value="{{ overrides_form.bed_max_temp }}" placeholder="e.g. 60" />
-          </label>
-          <label>Color HEX
-            <input id="color_hex" name="color_hex" value="{{ overrides_form.color_hex }}" placeholder="RRGGBB" />
-          </label>
-        </div>
-        <p class="hint">All fields are optional. Filled values override Spoolman data in the OpenSpool payload.</p>
-        <div class="actions">
-          <button class="preview-btn" formaction="/preview">Preview NFC payload</button>
-          <button class="write-btn" formaction="/write">Write to NFC tag</button>
-        </div>
-      </form>
-      <form method="post" action="/read">
-        <div class="actions">
-          <button class="read-btn" type="submit">Read NFC tag</button>
-        </div>
-      </form>
+  <!-- Toolbar -->
+  <div class="toolbar">
+    <svg class="toolbar-logo" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+      <defs><linearGradient id="tg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#2196F3"/><stop offset="100%" stop-color="#00BCD4"/></linearGradient></defs>
+      <circle cx="32" cy="32" r="20" fill="none" stroke="url(#tg)" stroke-width="3"/>
+      <circle cx="32" cy="32" r="13" fill="none" stroke="url(#tg)" stroke-width="2.5" stroke-dasharray="6 4"/>
+      <circle cx="32" cy="32" r="5" fill="url(#tg)"/>
+    </svg>
+    <span class="toolbar-title">Spool Tag Writer</span>
+    <div class="toolbar-meta">
+      <span><span class="toolbar-dot"></span> {{ settings.nfc_backend }}</span>
+      <span>Reader: {{ settings.nfc_reader_name }}</span>
     </div>
+  </div>
 
+  <div class="container">
+    <!-- ═══ NFC Write Card ═══ -->
     <div class="card">
-      <h2>Import From Prusament QR</h2>
-      <p class="meta">
-        Paste a `prusa.io/s/...` or `prusament.com/...` URL, or scan it with your phone camera.
-      </p>
-      <div class="form-grid">
-        <label>Prusament URL
-          <input id="prusament-url" placeholder="e.g. http://prusa.io/s/ed9cf32287" />
-        </label>
+      <div class="card-header">
+        <span class="icon">&#x1F4BE;</span> NFC Tag Writer
       </div>
-      <div class="actions">
-        <button class="preview-btn" id="prusament-import-btn" type="button">Load data from URL</button>
-        <button class="phone-btn" id="prusament-scan-btn" type="button">Scan QR with camera</button>
-        <button class="write-btn" id="prusament-create-filament-btn" type="button">Create filament in Spoolman</button>
-        <button class="write-btn" id="prusament-create-spool-btn" type="button">Create spool in Spoolman</button>
-        <button class="preview-btn hidden" id="prusament-stop-btn" type="button">Stop camera</button>
-      </div>
-      <video id="prusament-video" class="video hidden" playsinline muted></video>
-      <p class="status" id="prusament-status"></p>
-      <p class="status" id="prusament-match-status"></p>
-      <div class="grid hidden" id="prusament-result">
-        <div class="card">
-          <h2>Imported Prusament Data</h2>
-          <pre id="prusament-readout"></pre>
-        </div>
-        <div class="card">
-          <h2>Applied Overrides</h2>
-          <pre id="prusament-overrides"></pre>
-        </div>
+      <div class="card-body">
+        {% if error %}
+          <div class="error-banner">{{ error }}</div>
+        {% endif %}
+        <form method="post">
+          <div class="form-group">
+            <label for="spool_id">Spool</label>
+            <select name="spool_id" id="spool_id" required>
+              {% for spool in spools %}
+                <option value="{{ spool.id }}" {% if selected_spool_id == spool.id %}selected{% endif %}>
+                  {{ spool_label(spool) }}
+                </option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="form-grid">
+            <div class="form-group">
+              <label>Type</label>
+              <input id="type" name="type" value="{{ overrides_form.type }}" placeholder="PLA" />
+            </div>
+            <div class="form-group">
+              <label>Brand</label>
+              <input id="brand" name="brand" value="{{ overrides_form.brand }}" placeholder="Spectrum" />
+            </div>
+            <div class="form-group">
+              <label>Subtype</label>
+              <input id="subtype" name="subtype" value="{{ overrides_form.subtype }}" placeholder="Wood" />
+            </div>
+            <div class="form-group">
+              <label>Color HEX</label>
+              <input id="color_hex" name="color_hex" value="{{ overrides_form.color_hex }}" placeholder="RRGGBB" />
+            </div>
+            <div class="form-group">
+              <label>Min temp</label>
+              <input id="min_temp" name="min_temp" value="{{ overrides_form.min_temp }}" placeholder="190" />
+            </div>
+            <div class="form-group">
+              <label>Max temp</label>
+              <input id="max_temp" name="max_temp" value="{{ overrides_form.max_temp }}" placeholder="220" />
+            </div>
+            <div class="form-group">
+              <label>Bed min</label>
+              <input id="bed_min_temp" name="bed_min_temp" value="{{ overrides_form.bed_min_temp }}" placeholder="50" />
+            </div>
+            <div class="form-group">
+              <label>Bed max</label>
+              <input id="bed_max_temp" name="bed_max_temp" value="{{ overrides_form.bed_max_temp }}" placeholder="60" />
+            </div>
+          </div>
+          <p class="hint">Override fields are optional. Filled values replace Spoolman data in the OpenSpool payload.</p>
+          <div class="actions">
+            <button class="btn btn-outline" formaction="/preview">Preview</button>
+            <button class="btn btn-primary" formaction="/write">Write Tag</button>
+          </div>
+        </form>
+        <hr class="divider" />
+        <form method="post" action="/read">
+          <button class="btn btn-info" type="submit">Read Tag</button>
+        </form>
       </div>
     </div>
 
+    <!-- ═══ Prusament Import Card ═══ -->
+    <div class="card">
+      <div class="card-header">
+        <span class="icon">&#x1F4E5;</span> Prusament Import
+      </div>
+      <div class="card-body">
+        <p class="meta">Paste a <code>prusa.io/s/...</code> URL or scan a QR code to import filament data.</p>
+        <div class="form-group">
+          <label>Prusament URL</label>
+          <input id="prusament-url" placeholder="http://prusa.io/s/ed9cf32287" />
+        </div>
+        <div class="actions">
+          <button class="btn btn-outline" id="prusament-import-btn" type="button">Load URL</button>
+          <button class="btn btn-warning" id="prusament-scan-btn" type="button">Scan QR</button>
+          <button class="btn btn-success" id="prusament-create-filament-btn" type="button">Create Filament</button>
+          <button class="btn btn-success" id="prusament-create-spool-btn" type="button">Create Spool</button>
+          <button class="btn btn-outline hidden" id="prusament-stop-btn" type="button">Stop Camera</button>
+        </div>
+        <video id="prusament-video" class="video hidden" playsinline muted></video>
+        <p class="status" id="prusament-status"></p>
+        <p class="status" id="prusament-match-status"></p>
+        <div class="result-grid hidden" id="prusament-result">
+          <div class="result-panel">
+            <h3>Imported Data</h3>
+            <pre id="prusament-readout"></pre>
+          </div>
+          <div class="result-panel">
+            <h3>Applied Overrides</h3>
+            <pre id="prusament-overrides"></pre>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ Web NFC Card ═══ -->
     <div class="card hidden" id="web-nfc-card">
-      <h2>Web NFC For Android</h2>
-      <p class="meta" id="web-nfc-meta">
-        Your phone can read and write tags directly in the browser if Web NFC is supported.
-      </p>
-      <div class="actions">
-        <button class="phone-btn" id="web-nfc-read-btn" type="button">Read with phone</button>
-        <button class="phone-btn" id="web-nfc-write-btn" type="button">Write with phone</button>
+      <div class="card-header">
+        <span class="icon">&#x1F4F1;</span> Web NFC (Android)
       </div>
-      <p class="status" id="web-nfc-status"></p>
-      <div class="grid hidden" id="web-nfc-result">
-        <div class="card">
-          <h2>Data Read With Phone</h2>
-          <pre id="web-nfc-readout"></pre>
+      <div class="card-body">
+        <p class="meta" id="web-nfc-meta">Read and write tags directly from your phone browser.</p>
+        <div class="actions">
+          <button class="btn btn-warning" id="web-nfc-read-btn" type="button">Read with Phone</button>
+          <button class="btn btn-warning" id="web-nfc-write-btn" type="button">Write with Phone</button>
         </div>
-        <div class="card">
-          <h2>OpenSpool payload</h2>
-          <pre id="web-nfc-payload"></pre>
+        <p class="status" id="web-nfc-status"></p>
+        <div class="result-grid hidden" id="web-nfc-result">
+          <div class="result-panel">
+            <h3>Tag Data</h3>
+            <pre id="web-nfc-readout"></pre>
+          </div>
+          <div class="result-panel">
+            <h3>OpenSpool Payload</h3>
+            <pre id="web-nfc-payload"></pre>
+          </div>
         </div>
       </div>
     </div>
 
+    <!-- ═══ Client Preview Card ═══ -->
     <div class="card hidden" id="client-preview-card">
-      <h2>Ready For NFC Writing</h2>
-      <p class="meta" id="client-preview-meta"></p>
-      <pre id="client-preview-json"></pre>
+      <div class="card-header">
+        <span class="icon">&#x1F50D;</span> Ready For Writing
+      </div>
+      <div class="card-body">
+        <p class="meta" id="client-preview-meta"></p>
+        <pre id="client-preview-json"></pre>
+      </div>
     </div>
 
+    <!-- ═══ Server Preview ═══ -->
     {% if preview %}
     <div class="card">
-      <h2>OpenSpool Payload Preview</h2>
-      <p class="meta">Spool ID: {{ preview.spool.id }} | Payload size: {{ preview.payload_size }} B</p>
-      {% if preview.overrides %}
-      <p class="meta">Applied overrides: {{ preview.overrides | tojson }}</p>
-      {% endif %}
-      <pre>{{ preview.payload_json }}</pre>
+      <div class="card-header">
+        <span class="icon">&#x1F50D;</span> OpenSpool Payload Preview
+      </div>
+      <div class="card-body">
+        <p class="meta">Spool #{{ preview.spool.id }} &middot; {{ preview.payload_size }} B</p>
+        {% if preview.overrides %}
+        <p class="meta">Overrides: {{ preview.overrides | tojson }}</p>
+        {% endif %}
+        <pre>{{ preview.payload_json }}</pre>
+      </div>
     </div>
     {% endif %}
 
+    <!-- ═══ Write / Read Results ═══ -->
     {% if result %}
-    <div class="grid">
-      {% if result.write %}
-      <div class="card">
-        <h2>Write Result</h2>
-        <pre>{{ result.write | tojson(indent=2) }}</pre>
+    <div class="card full-width">
+      <div class="card-header">
+        <span class="icon">&#x2705;</span> Results
       </div>
-      {% endif %}
-      {% if result.read %}
-      <div class="card">
-        <h2>Data Read From Tag</h2>
-        <pre>{{ result.read | tojson(indent=2) }}</pre>
+      <div class="card-body">
+        <div class="result-grid">
+          {% if result.write %}
+          <div class="result-panel">
+            <h3>Write Result</h3>
+            <pre>{{ result.write | tojson(indent=2) }}</pre>
+          </div>
+          {% endif %}
+          {% if result.read %}
+          <div class="result-panel">
+            <h3>Data Read From Tag</h3>
+            <pre>{{ result.read | tojson(indent=2) }}</pre>
+          </div>
+          {% endif %}
+        </div>
+        {% if result.read and result.read.payload_json is defined %}
+        <hr class="divider" />
+        <h3 style="font-size:0.78rem;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:0.5rem;">OpenSpool Payload From Tag</h3>
+        <pre>{{ result.read.payload_json | tojson(indent=2) }}</pre>
+        {% endif %}
       </div>
-      {% endif %}
     </div>
-    {% if result.read and result.read.payload_json is defined %}
-    <div class="card">
-      <h2>OpenSpool Payload From Tag</h2>
-      <pre>{{ result.read.payload_json | tojson(indent=2) }}</pre>
-    </div>
-    {% endif %}
     {% endif %}
   </div>
+
   <script>
     (function () {
       const spoolSelect = document.getElementById("spool_id");
@@ -588,7 +823,7 @@
           return;
         }
         const spoolId = preview.spool && preview.spool.id ? preview.spool.id : "?";
-        clientPreviewMeta.textContent = `Spool ID: ${spoolId} | Payload size: ${preview.payload_size} B`;
+        clientPreviewMeta.textContent = `Spool #${spoolId} \u00b7 ${preview.payload_size} B`;
         clientPreviewJson.textContent = preview.payload_json || JSON.stringify(preview.payload || {}, null, 2);
         clientPreviewCard.classList.remove("hidden");
       };

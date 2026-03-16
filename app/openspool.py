@@ -95,6 +95,21 @@ def _normalize_filament_token(value: Any) -> str:
     return re.sub(r"[^A-Z0-9]+", "", _to_text(value).strip().upper())
 
 
+def _derive_filament_subtype(name: Any, filament_type: str, brand: Any = None) -> str:
+    cleaned = _to_text(name).strip()
+    if not cleaned:
+        return ""
+    brand_text = _to_text(brand).strip()
+    if brand_text:
+        cleaned = re.sub(rf"^\s*{re.escape(brand_text)}\s+", "", cleaned, flags=re.IGNORECASE)
+    if filament_type and cleaned.upper().startswith(filament_type.upper()):
+        cleaned = cleaned[len(filament_type) :].lstrip(" -")
+    cleaned = re.sub(r"\s+\d+(?:[.,]\d+)?\s*kg\s*$", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\s+\d+(?:[.,]\d+)?\s*g\s*$", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\s+\d+(?:[.,]\d+)?\s*mm\s*$", "", cleaned, flags=re.IGNORECASE)
+    return cleaned.strip()
+
+
 def _extract_canonical_filament_type(*values: Any) -> str:
     raw_values = [_to_text(value).strip() for value in values if _to_text(value).strip()]
     for raw in raw_values:
@@ -154,21 +169,24 @@ def build_openspool_payload(spool: dict[str, Any], spoolman_url: str) -> dict[st
     _ = spoolman_url
     filament = spool.get("filament") if isinstance(spool.get("filament"), dict) else {}
     vendor = filament.get("vendor") if isinstance(filament.get("vendor"), dict) else {}
+    filament_extra = filament.get("extra") if isinstance(filament.get("extra"), dict) else {}
     bed_temp_common = _first_non_null(filament, "bed_temperature", "bedTemperature")
+    brand = _to_text(
+        _first_non_null(vendor, "name", "brand", "manufacturer")
+        or _first_non_null(filament, "brand", "manufacturer")
+    )
+    filament_type = _extract_canonical_filament_type(
+        _first_non_null(filament, "material", "material_name", "type"),
+        _first_non_null(filament, "name", "filament_name"),
+        _first_non_null(filament, "subtype", "sub_type", "variant"),
+    )
 
     payload = {
         "protocol": "openspool",
         "version": "1.0",
-        "type": _extract_canonical_filament_type(
-            _first_non_null(filament, "material", "material_name", "type"),
-            _first_non_null(filament, "name", "filament_name"),
-            _first_non_null(filament, "subtype", "sub_type", "variant"),
-        ),
+        "type": filament_type,
         "color_hex": _to_color_hex(_first_non_null(filament, "color_hex", "colorHex")),
-        "brand": _to_text(
-            _first_non_null(vendor, "name", "brand", "manufacturer")
-            or _first_non_null(filament, "brand", "manufacturer")
-        ),
+        "brand": brand,
         "min_temp": _to_text(
             _first_non_null(
                 filament,
@@ -177,10 +195,17 @@ def build_openspool_payload(spool: dict[str, Any], spoolman_url: str) -> dict[st
                 "temperature_min",
                 "temperatureMin",
                 "print_temperature_min",
+                "settings_extruder_temp",
             )
         ),
         "max_temp": _to_text(
             _first_non_null(
+                filament_extra,
+                "max_temp",
+                "maxTemperature",
+                "max_temperature",
+            )
+            or _first_non_null(
                 filament,
                 "max_temperature",
                 "maxTemperature",
@@ -191,18 +216,32 @@ def build_openspool_payload(spool: dict[str, Any], spoolman_url: str) -> dict[st
         ),
         "bed_min_temp": _to_text(
             _first_non_null(
-                filament, "bed_min_temperature", "bedTemperatureMin", "bed_temperature_min"
+                filament,
+                "bed_min_temperature",
+                "bedTemperatureMin",
+                "bed_temperature_min",
+                "settings_bed_temp",
             )
             or bed_temp_common
         ),
         "bed_max_temp": _to_text(
             _first_non_null(
-                filament, "bed_max_temperature", "bedTemperatureMax", "bed_temperature_max"
+                filament_extra,
+                "bed_max_temp",
+                "bedTemperatureMax",
+                "bed_max_temperature",
+                "bed_temperature_max",
             )
             or bed_temp_common
         ),
         "subtype": _to_text(
-            _first_non_null(filament, "subtype", "sub_type", "variant") or ""
+            _first_non_null(filament, "subtype", "sub_type", "variant")
+            or _derive_filament_subtype(
+                _first_non_null(filament, "name", "filament_name"),
+                filament_type,
+                brand,
+            )
+            or ""
         ),
         "spoolman_id": _to_text(spool.get("id")),
     }
