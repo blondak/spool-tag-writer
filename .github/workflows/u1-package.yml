@@ -12,6 +12,9 @@ on:
 permissions:
   contents: write
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build-and-package:
     runs-on: ubuntu-latest
@@ -20,12 +23,12 @@ jobs:
       package_file: ${{ steps.meta.outputs.package_file }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: "20"
           cache: npm
@@ -55,7 +58,7 @@ jobs:
           ./scripts/u1-create-package.sh "${{ steps.meta.outputs.package_version }}"
 
       - name: Upload package artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: spool-tag-writer-u1-${{ steps.meta.outputs.package_version }}
           path: |
@@ -65,7 +68,7 @@ jobs:
 
       - name: Publish GitHub release assets
         if: github.ref_type == 'tag'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v2.5.0
         with:
           tag_name: ${{ github.ref_name }}
           prerelease: ${{ contains(github.ref_name, '-') }}
