@@ -10,11 +10,16 @@ A Python application for:
 - integrating with Moonraker/Fluidd through a remote method.
 
 ## Features
-- Web UI (`/`) with spool selection:
+- Web UI (`/`) built with Vue components and AdminLTE 4:
   - `Preview NFC payload`,
   - `Write to NFC tag`,
   - optional overrides for `type`, `brand`, `subtype`, `min/max temp`, `bed min/max temp`, and `color_hex`,
-  - automatic prefill of available values from Spoolman after changing the selected spool.
+  - automatic prefill of available values from Spoolman after changing the selected spool,
+  - light/dark theme switch persisted in the browser.
+- Frontend and API are separated:
+  - the browser UI is served as a built SPA bundle from `app/static/dist`,
+  - Vue components call the FastAPI JSON endpoints under `/api/...`,
+  - the root page `/` only serves the frontend shell.
 - Moonraker agent:
   - registers the `spool_tag_writer_write_spool_tag` remote method,
   - accepts `spool_id` or tries to resolve the active spool from Moonraker.
@@ -23,6 +28,7 @@ A Python application for:
   - create filaments and spools in Spoolman,
   - prepare the newly created spool for NFC writing.
 - API:
+  - `GET /api/ui-context`
   - `GET /api/spools`
   - `GET /api/spools/{spool_id}`
   - `GET /api/spools/{spool_id}/overrides-defaults`
@@ -66,6 +72,8 @@ Manual installation:
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+npm install
+npm run build
 cp .env.example .env
 ```
 
@@ -82,6 +90,16 @@ uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload
 ```
 
 Web UI: `http://localhost:8080`
+
+If you change the Vue/AdminLTE frontend, rebuild it before starting or reloading the FastAPI app:
+```bash
+npm run build
+```
+
+Optional frontend-only development server:
+```bash
+npm run dev
+```
 
 Moonraker agent:
 ```bash
@@ -148,6 +166,11 @@ curl -X POST http://127.0.0.1:7125/server/extensions/request \
 Prepared unit files:
 - `examples/systemd/spool-tag-writer-web.service`
 - `examples/systemd/spool-tag-writer-agent.service`
+
+## Snapmaker U1 deployment
+For `SnapmakerU1-Extended-Firmware` deployment on the printer itself, including init scripts and a GitHub-based update flow, see:
+- `examples/u1/README.md`
+- bootstrap installer: `scripts/u1-bootstrap.sh`
 
 ## Hardware notes
 - ACR122U must be available through PC/SC.

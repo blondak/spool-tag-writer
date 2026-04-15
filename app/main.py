@@ -5,9 +5,9 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, Form, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse
-from fastapi.templating import Jinja2Templates
+from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from .config import Settings, get_settings
 from .nfc import NfcError, build_nfc_backend
@@ -17,15 +17,9 @@ from .spoolman import SpoolmanClient
 
 
 BASE_DIR = Path(__file__).resolve().parent
-TEMPLATES = Jinja2Templates(directory=str(BASE_DIR / "templates"))
-
-
-def _spool_label(spool: dict[str, Any]) -> str:
-    spool_id = spool.get("id", "?")
-    filament = spool.get("filament") if isinstance(spool.get("filament"), dict) else {}
-    filament_name = filament.get("name") or spool.get("name") or "unknown"
-    material = filament.get("material") or "-"
-    return f"#{spool_id} - {filament_name} ({material})"
+STATIC_DIR = BASE_DIR / "static"
+FRONTEND_DIST_DIR = STATIC_DIR / "dist"
+FRONTEND_INDEX_FILE = FRONTEND_DIST_DIR / "index.html"
 
 
 @asynccontextmanager
@@ -39,6 +33,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Spool Tag Writer", lifespan=lifespan)
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 OVERRIDE_KEYS = (
     "type",
@@ -52,31 +47,31 @@ OVERRIDE_KEYS = (
 )
 
 
-def _empty_override_form() -> dict[str, str]:
-    return {key: "" for key in OVERRIDE_KEYS}
-
-
-def _normalize_form_value(value: str | None) -> str | None:
+def _normalize_override_value(value: str | None) -> str | None:
     if value is None:
         return None
     normalized = value.strip()
     return normalized if normalized else None
 
 
-def _parse_overrides(overrides_form: dict[str, str | None]) -> dict[str, Any]:
-    overrides: dict[str, Any] = {}
-    for key in OVERRIDE_KEYS:
-        value = _normalize_form_value(overrides_form.get(key))
-        if value is None:
-            continue
-        if key == "color_hex":
-            overrides[key] = value.lstrip("#").upper()
-        else:
-            overrides[key] = value
-    return overrides
+def _describe_exception(exc: Exception) -> str:
+    detail = str(exc).strip()
+    return detail or exc.__class__.__name__
 
 
-def _form_override_values(
+@app.exception_handler(Exception)
+async def api_exception_handler(request: Request, exc: Exception):
+    if request.url.path.startswith("/api/"):
+        return JSONResponse(
+            status_code=500,
+            content={"detail": f"Internal server error: {_describe_exception(exc)}"},
+        )
+
+    return HTMLResponse("Internal Server Error", status_code=500)
+
+
+def _build_overrides(
+    *,
     type_value: str | None = None,
     color_hex: str | None = None,
     brand: str | None = None,
@@ -85,18 +80,27 @@ def _form_override_values(
     bed_min_temp: str | None = None,
     bed_max_temp: str | None = None,
     subtype: str | None = None,
-) -> dict[str, str]:
-    values = {
-        "type": type_value or "",
-        "color_hex": color_hex or "",
-        "brand": brand or "",
-        "min_temp": min_temp or "",
-        "max_temp": max_temp or "",
-        "bed_min_temp": bed_min_temp or "",
-        "bed_max_temp": bed_max_temp or "",
-        "subtype": subtype or "",
+) -> dict[str, Any]:
+    overrides: dict[str, Any] = {}
+    raw_values = {
+        "type": type_value,
+        "color_hex": color_hex,
+        "brand": brand,
+        "min_temp": min_temp,
+        "max_temp": max_temp,
+        "bed_min_temp": bed_min_temp,
+        "bed_max_temp": bed_max_temp,
+        "subtype": subtype,
     }
-    return values
+    for key, raw_value in raw_values.items():
+        value = _normalize_override_value(raw_value)
+        if value is None:
+            continue
+        if key == "color_hex":
+            overrides[key] = value.lstrip("#").upper()
+        else:
+            overrides[key] = value
+    return overrides
 
 
 def _stringify_override_value(value: Any) -> str:
@@ -107,21 +111,56 @@ def _stringify_override_value(value: Any) -> str:
     return str(value)
 
 
-def _extract_override_defaults(
-    spool: dict[str, Any], openspool_payload: dict[str, Any]
-) -> dict[str, str]:
-    _ = spool
-    defaults = _empty_override_form()
-    for key in OVERRIDE_KEYS:
-        defaults[key] = _stringify_override_value(openspool_payload.get(key))
-    return defaults
+def _extract_override_defaults(openspool_payload: dict[str, Any]) -> dict[str, str]:
+    return {
+        key: _stringify_override_value(openspool_payload.get(key))
+        for key in OVERRIDE_KEYS
+    }
+
+
+def _coerce_text(value: Any) -> str:
+    if value is None:
+        return ""
+    return str(value).strip()
+
+
+def _extract_spool_manufacturer(spool: dict[str, Any]) -> str:
+    filament = spool.get("filament")
+    if not isinstance(filament, dict):
+        return ""
+
+    for source in (filament.get("vendor"), filament.get("manufacturer")):
+        if isinstance(source, dict):
+            for key in ("name", "manufacturer", "brand"):
+                text = _coerce_text(source.get(key))
+                if text:
+                    return text
+        else:
+            text = _coerce_text(source)
+            if text:
+                return text
+
+    for key in ("manufacturer_name", "brand", "manufacturer"):
+        text = _coerce_text(filament.get(key))
+        if text:
+            return text
+
+    return _coerce_text(spool.get("manufacturer"))
+
+
+def _serialize_spool_for_ui(spool: dict[str, Any]) -> dict[str, Any]:
+    serialized = dict(spool)
+    manufacturer = _extract_spool_manufacturer(serialized)
+    if manufacturer:
+        serialized["manufacturer"] = manufacturer
+    return serialized
 
 
 async def _list_spools(request: Request) -> list[dict[str, Any]]:
     spools = await request.app.state.spoolman.list_spools()
     spools = [spool for spool in spools if isinstance(spool, dict)]
     spools.sort(key=lambda item: item.get("id", 0))
-    return spools
+    return [_serialize_spool_for_ui(spool) for spool in spools]
 
 
 async def _build_preview(
@@ -145,169 +184,54 @@ async def _build_override_defaults(request: Request, spool_id: int) -> dict[str,
     settings: Settings = request.app.state.settings
     spool = await request.app.state.spoolman.get_spool(spool_id)
     payload = build_openspool_payload(spool, settings.spoolman_url)
-    return _extract_override_defaults(spool, payload)
+    return _extract_override_defaults(payload)
 
 
-async def _render_index(
-    request: Request,
-    *,
-    spools: list[dict[str, Any]],
-    error: str | None = None,
-    result: dict[str, Any] | None = None,
-    preview: dict[str, Any] | None = None,
-    selected_spool_id: int | None = None,
-    overrides_form: dict[str, str] | None = None,
-    status_code: int = 200,
-):
-    return TEMPLATES.TemplateResponse(
-        request,
-        "index.html",
-        {
-            "spools": spools,
-            "error": error,
-            "result": result,
-            "preview": preview,
-            "selected_spool_id": selected_spool_id,
-            "spool_label": _spool_label,
-            "settings": request.app.state.settings,
-            "overrides_form": overrides_form or _empty_override_form(),
-        },
-        status_code=status_code,
-    )
+async def _write_preview_to_tag(
+    request: Request, preview_data: dict[str, Any]
+) -> dict[str, Any]:
+    write_result = request.app.state.nfc.write_openspool_payload(preview_data["payload_json"])
+    read_result = request.app.state.nfc.read_current_payload()
+    return {
+        "preview": preview_data,
+        "write_result": write_result,
+        "readback": read_result,
+    }
 
 
 @app.get("/", response_class=HTMLResponse)
-async def index(request: Request):
-    error = None
-    spools: list[dict[str, Any]] = []
-    try:
-        spools = await _list_spools(request)
-    except Exception as exc:
-        error = str(exc)
-    return await _render_index(request, spools=spools, error=error)
+async def index():
+    if FRONTEND_INDEX_FILE.exists():
+        return FileResponse(FRONTEND_INDEX_FILE)
 
-
-@app.post("/preview", response_class=HTMLResponse)
-async def preview(
-    request: Request,
-    spool_id: int = Form(...),
-    type_value: str | None = Form(None, alias="type"),
-    color_hex: str | None = Form(None),
-    brand: str | None = Form(None),
-    min_temp: str | None = Form(None),
-    max_temp: str | None = Form(None),
-    bed_min_temp: str | None = Form(None),
-    bed_max_temp: str | None = Form(None),
-    subtype: str | None = Form(None),
-):
-    overrides_form = _form_override_values(
-        type_value=type_value,
-        color_hex=color_hex,
-        brand=brand,
-        min_temp=min_temp,
-        max_temp=max_temp,
-        bed_min_temp=bed_min_temp,
-        bed_max_temp=bed_max_temp,
-        subtype=subtype,
-    )
-    try:
-        spools = await _list_spools(request)
-    except Exception:
-        spools = []
-    try:
-        overrides = _parse_overrides(overrides_form)
-        preview_data = await _build_preview(request, spool_id, overrides)
-    except Exception as exc:
-        return await _render_index(
-            request,
-            spools=spools,
-            error=str(exc),
-            selected_spool_id=spool_id,
-            overrides_form=overrides_form,
-            status_code=400,
-        )
-    return await _render_index(
-        request,
-        spools=spools,
-        preview=preview_data,
-        selected_spool_id=spool_id,
-        overrides_form=overrides_form,
+    return HTMLResponse(
+        """
+        <!doctype html>
+        <html lang="en">
+          <head>
+            <meta charset="utf-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1" />
+            <title>Spool Tag Writer</title>
+          </head>
+          <body>
+            <main style="max-width:42rem;margin:4rem auto;font-family:system-ui,sans-serif;line-height:1.5;">
+              <h1>Frontend build is missing</h1>
+              <p>Run <code>npm install</code> and <code>npm run build</code> to generate the Vue/AdminLTE bundle.</p>
+            </main>
+          </body>
+        </html>
+        """,
+        status_code=503,
     )
 
 
-@app.post("/write", response_class=HTMLResponse)
-async def write_tag(
-    request: Request,
-    spool_id: int = Form(...),
-    type_value: str | None = Form(None, alias="type"),
-    color_hex: str | None = Form(None),
-    brand: str | None = Form(None),
-    min_temp: str | None = Form(None),
-    max_temp: str | None = Form(None),
-    bed_min_temp: str | None = Form(None),
-    bed_max_temp: str | None = Form(None),
-    subtype: str | None = Form(None),
-):
-    overrides_form = _form_override_values(
-        type_value=type_value,
-        color_hex=color_hex,
-        brand=brand,
-        min_temp=min_temp,
-        max_temp=max_temp,
-        bed_min_temp=bed_min_temp,
-        bed_max_temp=bed_max_temp,
-        subtype=subtype,
-    )
-    try:
-        spools = await _list_spools(request)
-    except Exception:
-        spools = []
-    try:
-        overrides = _parse_overrides(overrides_form)
-        preview_data = await _build_preview(request, spool_id, overrides)
-        write_result = request.app.state.nfc.write_openspool_payload(preview_data["payload_json"])
-        read_result = request.app.state.nfc.read_current_payload()
-    except (NfcError, RuntimeError, ValueError) as exc:
-        return await _render_index(
-            request,
-            spools=spools,
-            error=str(exc),
-            selected_spool_id=spool_id,
-            overrides_form=overrides_form,
-            status_code=400,
-        )
-    return await _render_index(
-        request,
-        spools=spools,
-        result={"write": write_result, "read": read_result},
-        preview=preview_data,
-        selected_spool_id=spool_id,
-        overrides_form=overrides_form,
-    )
-
-
-@app.post("/read", response_class=HTMLResponse)
-async def read_tag(request: Request):
-    try:
-        spools = await _list_spools(request)
-    except Exception:
-        spools = []
-    try:
-        read_result = request.app.state.nfc.read_current_payload()
-    except NfcError as exc:
-        return await _render_index(
-            request,
-            spools=spools,
-            error=str(exc),
-            overrides_form=_empty_override_form(),
-            status_code=400,
-        )
-    return await _render_index(
-        request,
-        spools=spools,
-        result={"read": read_result},
-        overrides_form=_empty_override_form(),
-    )
+@app.get("/api/ui-context")
+async def api_ui_context(request: Request):
+    settings: Settings = request.app.state.settings
+    return {
+        "nfc_backend": settings.nfc_backend,
+        "nfc_reader_name": settings.nfc_reader_name,
+    }
 
 
 @app.get("/api/spools")
@@ -321,7 +245,8 @@ async def api_spools(request: Request):
 @app.get("/api/spools/{spool_id}")
 async def api_spool(request: Request, spool_id: int):
     try:
-        return await request.app.state.spoolman.get_spool(spool_id)
+        spool = await request.app.state.spoolman.get_spool(spool_id)
+        return _serialize_spool_for_ui(spool)
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -422,13 +347,9 @@ async def api_preview(request: Request, spool_id: int = Query(...)):
 async def api_write(request: Request, spool_id: int = Query(...)):
     try:
         preview_data = await _build_preview(request, spool_id)
-        write_result = request.app.state.nfc.write_openspool_payload(preview_data["payload_json"])
-        read_result = request.app.state.nfc.read_current_payload()
         return {
             "spool_id": spool_id,
-            "preview": preview_data,
-            "write_result": write_result,
-            "readback": read_result,
+            **(await _write_preview_to_tag(request, preview_data)),
         }
     except (NfcError, RuntimeError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -448,7 +369,7 @@ async def api_preview_with_overrides(
     subtype: str | None = Query(None),
 ):
     try:
-        overrides_form = _form_override_values(
+        overrides = _build_overrides(
             type_value=type_value,
             color_hex=color_hex,
             brand=brand,
@@ -458,7 +379,6 @@ async def api_preview_with_overrides(
             bed_max_temp=bed_max_temp,
             subtype=subtype,
         )
-        overrides = _parse_overrides(overrides_form)
         return await _build_preview(request, spool_id, overrides)
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -478,7 +398,7 @@ async def api_write_with_overrides(
     subtype: str | None = Query(None),
 ):
     try:
-        overrides_form = _form_override_values(
+        overrides = _build_overrides(
             type_value=type_value,
             color_hex=color_hex,
             brand=brand,
@@ -488,15 +408,10 @@ async def api_write_with_overrides(
             bed_max_temp=bed_max_temp,
             subtype=subtype,
         )
-        overrides = _parse_overrides(overrides_form)
         preview_data = await _build_preview(request, spool_id, overrides)
-        write_result = request.app.state.nfc.write_openspool_payload(preview_data["payload_json"])
-        read_result = request.app.state.nfc.read_current_payload()
         return {
             "spool_id": spool_id,
-            "preview": preview_data,
-            "write_result": write_result,
-            "readback": read_result,
+            **(await _write_preview_to_tag(request, preview_data)),
         }
     except (NfcError, RuntimeError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -506,5 +421,10 @@ async def api_write_with_overrides(
 async def api_read_tag(request: Request):
     try:
         return request.app.state.nfc.read_current_payload()
-    except NfcError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except (NfcError, RuntimeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=_describe_exception(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"NFC read failed: {_describe_exception(exc)}",
+        ) from exc

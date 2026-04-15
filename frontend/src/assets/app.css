@@ -1,0 +1,279 @@
+:root {
+  --spool-primary: #cc6d1e;
+  --spool-primary-rgb: 204, 109, 30;
+  --spool-primary-dark: #9d4f10;
+  --spool-secondary: #1f6f78;
+  --spool-surface: #f6f2eb;
+  --spool-panel: #fffdf9;
+  --spool-border: rgba(43, 58, 73, 0.14);
+  --spool-ink: #23313f;
+  --spool-muted: #667382;
+  --spool-sidebar: #1f2937;
+  --spool-sidebar-accent: #f3e1c7;
+  --bs-primary: var(--spool-primary);
+  --bs-primary-rgb: var(--spool-primary-rgb);
+  --bs-link-color: var(--spool-primary);
+  --bs-link-hover-color: var(--spool-primary-dark);
+  --lte-body-bg: var(--spool-surface);
+  --lte-body-color: var(--spool-ink);
+  --lte-card-bg: var(--spool-panel);
+  --lte-card-cap-bg: transparent;
+  --lte-card-border-color: var(--spool-border);
+  --lte-sidebar-bg: var(--spool-sidebar);
+  --lte-sidebar-color: rgba(255, 255, 255, 0.78);
+  --lte-sidebar-hover-color: #ffffff;
+  --lte-sidebar-hover-bg: rgba(255, 255, 255, 0.08);
+  --lte-sidebar-active-color: #ffffff;
+  --lte-sidebar-active-bg: rgba(var(--spool-primary-rgb), 0.28);
+  --spool-body-gradient:
+    radial-gradient(circle at top left, rgba(204, 109, 30, 0.12), transparent 32%),
+    radial-gradient(circle at top right, rgba(31, 111, 120, 0.12), transparent 30%),
+    linear-gradient(180deg, #fbf7f0 0%, #f2eee8 100%);
+}
+
+[data-bs-theme="dark"] {
+  --spool-primary: #f09a48;
+  --spool-primary-rgb: 240, 154, 72;
+  --spool-primary-dark: #ffd0a0;
+  --spool-secondary: #6dc0c7;
+  --spool-surface: #11161d;
+  --spool-panel: #19212b;
+  --spool-border: rgba(148, 163, 184, 0.16);
+  --spool-ink: #ebf2f8;
+  --spool-muted: #97a5b5;
+  --spool-sidebar: #0d1319;
+  --spool-sidebar-accent: #ffd29c;
+  --bs-link-color: #ffbe78;
+  --bs-link-hover-color: #ffd2a5;
+  --lte-body-bg: var(--spool-surface);
+  --lte-body-color: var(--spool-ink);
+  --lte-card-bg: var(--spool-panel);
+  --lte-card-border-color: var(--spool-border);
+  --spool-body-gradient:
+    radial-gradient(circle at top left, rgba(240, 154, 72, 0.12), transparent 28%),
+    radial-gradient(circle at top right, rgba(88, 184, 195, 0.1), transparent 30%),
+    linear-gradient(180deg, #11161d 0%, #0b1015 100%);
+}
+
+html,
+body,
+#app {
+  min-height: 100%;
+}
+
+body {
+  color: var(--spool-ink);
+  background-color: var(--lte-body-bg);
+  background: var(--spool-body-gradient);
+  background-attachment: fixed;
+}
+
+a {
+  text-decoration: none;
+}
+
+.brand-mark {
+  width: 2.35rem;
+  height: 2.35rem;
+  border-radius: 0.9rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(145deg, #f5af61 0%, #c95b14 100%);
+  color: #fff8ef;
+  box-shadow: 0 14px 30px rgba(157, 79, 16, 0.25);
+}
+
+.sidebar-brand {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.brand-link {
+  gap: 0.9rem;
+}
+
+.card-title {
+  display: inline-flex;
+  align-items: center;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.card-tools {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.form-control:focus,
+.form-select:focus {
+  border-color: rgba(var(--spool-primary-rgb), 0.52);
+  box-shadow: 0 0 0 0.26rem rgba(var(--spool-primary-rgb), 0.14);
+}
+
+.btn-icon {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.card-help-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: help;
+  line-height: 1;
+}
+
+.card-tools .btn-tool {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.card-help-tooltip .tooltip-inner {
+  max-width: 20rem;
+  text-align: left;
+}
+
+.spool-picker {
+  position: relative;
+}
+
+.spool-picker-toggle {
+  min-height: calc(1.5em + 0.75rem + 2px);
+}
+
+.spool-picker-selection {
+  display: block;
+  overflow: hidden;
+  padding-right: 1rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.spool-picker-menu {
+  margin-top: 0.375rem;
+  border: 1px solid var(--lte-card-border-color);
+  border-radius: 1rem;
+  background: var(--lte-card-bg);
+  box-shadow: 0 1.25rem 2.5rem rgba(15, 23, 42, 0.18);
+  overflow: hidden;
+}
+
+.spool-picker-list {
+  max-height: 18rem;
+  overflow-y: auto;
+}
+
+.spool-picker-option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.1rem;
+  white-space: normal;
+}
+
+.spool-picker-option-label {
+  font-weight: 600;
+}
+
+.spool-picker-option-meta {
+  font-size: 0.78rem;
+  color: var(--spool-muted);
+}
+
+.spool-picker-option.active .spool-picker-option-meta,
+.spool-picker-option:active .spool-picker-option-meta {
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.extruder-count-addon {
+  width: auto;
+}
+
+.extruder-count-addon .input-group-text,
+.extruder-count-addon .form-select {
+  white-space: nowrap;
+}
+
+.extruder-count-addon .form-select {
+  min-width: 4.5rem;
+}
+
+.extruder-slot-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 1rem;
+}
+
+.extruder-slot-label .badge {
+  min-width: 3rem;
+  padding-inline: 0.8rem;
+}
+
+.extruder-slot-picker {
+  min-width: 0;
+}
+
+.extruder-slot-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.json-block {
+  margin: 0;
+  padding: 1rem;
+  border-radius: 1rem;
+  background: #1f2937;
+  color: #edf2f7;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  font-family: "IBM Plex Mono", "SFMono-Regular", monospace;
+  font-size: 0.82rem;
+  line-height: 1.65;
+  overflow-x: auto;
+}
+
+.prusament-scanner {
+  display: block;
+  overflow: hidden;
+  border: 1px solid var(--lte-card-border-color);
+  border-radius: 1rem;
+  background: #000;
+}
+
+.prusament-scanner video,
+.prusament-scanner canvas {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+}
+
+.app-content-header {
+  padding-bottom: 0;
+}
+
+.app-content {
+  padding-bottom: 2rem;
+}
+
+.nav-pills .nav-link {
+  border-radius: 0.9rem;
+}
+
+.nav-tabs .nav-link {
+  cursor: pointer;
+}

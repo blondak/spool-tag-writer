@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SESSION_FILE="$ROOT_DIR/.codex/session_id"
+
+UUID_RE='^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+
+if [[ "${1:-}" == "--set-session" ]]; then
+  if [[ -z "${2:-}" ]]; then
+    echo "Pouziti: $0 --set-session <session_id>" >&2
+    exit 2
+  fi
+  mkdir -p "$(dirname "$SESSION_FILE")"
+  printf '%s\n' "$2" > "$SESSION_FILE"
+  echo "Session ulozena do $SESSION_FILE"
+  exit 0
+fi
+
+if [[ -f "$SESSION_FILE" ]]; then
+  session_id="$(tr -d '[:space:]' < "$SESSION_FILE")"
+  if [[ "$session_id" =~ $UUID_RE ]]; then
+    exec codex resume "$session_id" -C "$ROOT_DIR" "$@"
+  fi
+fi
+
+exec codex resume --last -C "$ROOT_DIR" "$@"

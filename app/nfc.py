@@ -58,7 +58,26 @@ class PcscAcr122uBackend:
         except Exception as exc:  # pragma: no cover - hardware dependency
             raise NfcError("pyscard is not available. Install pyscard and PC/SC drivers.") from exc
 
-        available = readers()
+        try:
+            available = readers()
+        except Exception as exc:  # pragma: no cover - hardware dependency
+            message = str(exc).strip()
+            message_lower = message.lower()
+            if (
+                "failed to establish context" in message_lower
+                or "0x8010006a" in message_lower
+                or "access_pcsc" in message_lower
+                or "org.debian.pcsc-lite.access_pcsc" in message_lower
+                or "access_card" in message_lower
+                or "org.debian.pcsc-lite.access_card" in message_lower
+            ):
+                raise NfcError(
+                    "PC/SC access was denied. On Linux this usually means polkit did not allow the process "
+                    "to talk to pcscd. Run the backend from an active local desktop session or add a polkit "
+                    "rule for org.debian.pcsc-lite.access_pcsc and org.debian.pcsc-lite.access_card."
+                ) from exc
+            raise NfcError(f"Failed to query PC/SC readers: {message or exc.__class__.__name__}") from exc
+
         if not available:
             raise NfcError("No smartcard readers found.")
         for reader in available:

@@ -1,0 +1,67 @@
+workflow:
+  rules:
+    - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_BRANCH
+
+stages:
+  - build
+  - package
+  - publish
+
+default:
+  interruptible: true
+
+variables:
+  U1_PACKAGE_NAME: spool-tag-writer-u1
+
+build_u1_frontend:
+  stage: build
+  image: node:20-bookworm
+  script:
+    - npm ci
+    - npm run build
+  artifacts:
+    expire_in: 1 week
+    paths:
+      - app/static/dist/
+
+package_u1_release:
+  stage: package
+  image: python:3.12-bookworm
+  needs:
+    - build_u1_frontend
+  script:
+    - chmod +x scripts/u1-create-package.sh
+    - PACKAGE_VERSION="${CI_COMMIT_TAG:-${CI_COMMIT_REF_SLUG}-${CI_COMMIT_SHORT_SHA}}"
+    - PACKAGE_PATH="$(./scripts/u1-create-package.sh "$PACKAGE_VERSION")"
+    - PACKAGE_FILE="$(basename "$PACKAGE_PATH")"
+    - printf 'PACKAGE_VERSION=%s\n' "$PACKAGE_VERSION" >> package.env
+    - printf 'PACKAGE_PATH=%s\n' "$PACKAGE_PATH" >> package.env
+    - printf 'PACKAGE_FILE=%s\n' "$PACKAGE_FILE" >> package.env
+    - printf 'PACKAGE_SHA256_PATH=%s\n' "${PACKAGE_PATH}.sha256" >> package.env
+  artifacts:
+    expire_in: 1 week
+    paths:
+      - dist/u1/
+    reports:
+      dotenv: package.env
+
+publish_u1_package:
+  stage: publish
+  image: curlimages/curl:8.7.1
+  needs:
+    - package_u1_release
+  rules:
+    - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  script:
+    - PACKAGE_BASE_URL="${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/${U1_PACKAGE_NAME}/${PACKAGE_VERSION}"
+    - PACKAGE_DOWNLOAD_URL="${PACKAGE_BASE_URL}/${PACKAGE_FILE}"
+    - PACKAGE_SHA256_URL="${PACKAGE_DOWNLOAD_URL}.sha256"
+    - curl --fail --header "JOB-TOKEN: ${CI_JOB_TOKEN}" --upload-file "${PACKAGE_PATH}" "${PACKAGE_DOWNLOAD_URL}"
+    - curl --fail --header "JOB-TOKEN: ${CI_JOB_TOKEN}" --upload-file "${PACKAGE_SHA256_PATH}" "${PACKAGE_SHA256_URL}"
+    - printf 'PACKAGE_DOWNLOAD_URL=%s\n' "$PACKAGE_DOWNLOAD_URL" >> publish.env
+    - printf 'PACKAGE_SHA256_URL=%s\n' "$PACKAGE_SHA256_URL" >> publish.env
+  artifacts:
+    reports:
+      dotenv: publish.env
