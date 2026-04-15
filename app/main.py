@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .config import Settings, get_settings
-from .moonraker import resolve_spoolman_url
+from .moonraker import MoonrakerClient, resolve_spoolman_url
 from .nfc import NfcError, build_nfc_backend
 from .openspool import apply_openspool_overrides, build_openspool_payload
 from .prusament import PrusamentImportError, import_prusament_url
@@ -28,9 +28,11 @@ async def lifespan(app: FastAPI):
     settings = get_settings()
     settings.spoolman_url = await resolve_spoolman_url(settings)
     app.state.settings = settings
+    app.state.moonraker = MoonrakerClient(settings)
     app.state.spoolman = SpoolmanClient(settings)
     app.state.nfc = build_nfc_backend(settings)
     yield
+    await app.state.moonraker.close()
     await app.state.spoolman.close()
 
 
@@ -242,6 +244,90 @@ async def api_spools(request: Request):
     try:
         return await _list_spools(request)
     except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/extruder-mapping")
+async def api_get_extruder_mapping(request: Request):
+    try:
+        return await request.app.state.moonraker.get_extruder_mapping()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.put("/api/extruder-mapping")
+async def api_put_extruder_mapping(request: Request, mapping: dict[str, Any]):
+    try:
+        return await request.app.state.moonraker.save_extruder_mapping(mapping)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/printer/rfid/channels/{channel}")
+async def api_get_printer_rfid_channel(
+    request: Request,
+    channel: int,
+    refresh: bool = Query(True),
+):
+    try:
+        rfid_channel = await request.app.state.moonraker.get_filament_detect_channel(
+            channel,
+            refresh=refresh,
+        )
+        matched_spools: list[dict[str, Any]] = []
+        lot_nr = str(rfid_channel.get("card_uid") or "").strip()
+        if lot_nr:
+            matched_spools = [
+                _serialize_spool_for_ui(spool)
+                for spool in await request.app.state.spoolman.find_spools_by_lot_nr(lot_nr)
+            ]
+        return {
+            **rfid_channel,
+            "matched_spools": matched_spools,
+        }
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/spools/{spool_id}/lot-nr/from-printer-rfid")
+async def api_assign_spool_lot_nr_from_printer_rfid(
+    request: Request,
+    spool_id: int,
+    channel: int = Query(...),
+    refresh: bool = Query(True),
+):
+    try:
+        rfid_channel = await request.app.state.moonraker.get_filament_detect_channel(
+            channel,
+            refresh=refresh,
+        )
+        lot_nr = str(rfid_channel.get("card_uid") or "").strip()
+        if not lot_nr:
+            raise RuntimeError(
+                f"No RFID UID was detected on {rfid_channel.get('label') or f'channel {channel}'}."
+            )
+
+        cleared_spools: list[dict[str, Any]] = []
+        existing_spools = await request.app.state.spoolman.find_spools_by_lot_nr(
+            lot_nr,
+            exclude_spool_id=spool_id,
+        )
+        for existing_spool in existing_spools:
+            try:
+                existing_id = int(existing_spool.get("id"))
+            except (TypeError, ValueError):
+                continue
+            cleared = await request.app.state.spoolman.update_spool_lot_nr(existing_id, None)
+            cleared_spools.append(_serialize_spool_for_ui(cleared))
+
+        updated_spool = await request.app.state.spoolman.update_spool_lot_nr(spool_id, lot_nr)
+        return {
+            "spool": _serialize_spool_for_ui(updated_spool),
+            "cleared_spools": cleared_spools,
+            "rfid_channel": rfid_channel,
+            "lot_nr": lot_nr,
+        }
+    except RuntimeError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 

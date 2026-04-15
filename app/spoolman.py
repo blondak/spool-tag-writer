@@ -58,11 +58,11 @@ class SpoolmanClient:
     async def close(self) -> None:
         await self._client.aclose()
 
-    async def _first_ok(self, paths: list[str]) -> Any:
+    async def _first_ok(self, paths: list[str], *, params: dict[str, Any] | None = None) -> Any:
         last_exc: Exception | None = None
         for path in paths:
             try:
-                response = await self._client.get(path)
+                response = await self._client.get(path, params=params)
                 if response.status_code == 404:
                     continue
                 response.raise_for_status()
@@ -97,8 +97,31 @@ class SpoolmanClient:
             raise RuntimeError(last_error_text)
         raise RuntimeError("No compatible Spoolman endpoint found.")
 
-    async def list_spools(self) -> list[dict[str, Any]]:
-        data = await self._first_ok(["/api/v1/spool", "/api/v1/spools"])
+    async def _first_patch_ok(self, paths: list[str], payload: dict[str, Any]) -> Any:
+        last_error_text: str | None = None
+        for path in paths:
+            try:
+                response = await self._client.patch(path, json=payload)
+                if response.status_code == 404:
+                    continue
+                response.raise_for_status()
+                return response.json()
+            except httpx.HTTPError as exc:
+                response = getattr(exc, "response", None)
+                if response is not None:
+                    last_error_text = (
+                        f"Spoolman request failed: {exc}. "
+                        f"Response body: {response.text}. "
+                        f"Payload: {payload}"
+                    )
+                else:
+                    last_error_text = f"Spoolman request failed: {exc}. Payload: {payload}"
+        if last_error_text:
+            raise RuntimeError(last_error_text)
+        raise RuntimeError("No compatible Spoolman endpoint found.")
+
+    async def list_spools(self, *, params: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+        data = await self._first_ok(["/api/v1/spool", "/api/v1/spools"], params=params)
         if isinstance(data, list):
             return data
         if isinstance(data, dict):
@@ -127,6 +150,37 @@ class SpoolmanClient:
             return data
         raise RuntimeError("Unexpected spool detail response format from Spoolman.")
 
+    async def find_spools_by_lot_nr(
+        self,
+        lot_nr: str,
+        *,
+        exclude_spool_id: int | None = None,
+    ) -> list[dict[str, Any]]:
+        normalized_lot_nr = self._normalize_lot_nr(lot_nr)
+        if not normalized_lot_nr:
+            return []
+
+        spools = await self.list_spools(params={"allow_archived": "true"})
+        matches: list[dict[str, Any]] = []
+        for spool in spools:
+            if not isinstance(spool, dict):
+                continue
+            if exclude_spool_id is not None and str(spool.get("id")) == str(exclude_spool_id):
+                continue
+            if self._normalize_lot_nr(spool.get("lot_nr")) == normalized_lot_nr:
+                matches.append(spool)
+        return matches
+
+    async def update_spool_lot_nr(self, spool_id: int, lot_nr: str | None) -> dict[str, Any]:
+        normalized_lot_nr = self._normalize_lot_nr(lot_nr) or None
+        data = await self._first_patch_ok(
+            [f"/api/v1/spool/{spool_id}", f"/api/v1/spools/{spool_id}"],
+            {"lot_nr": normalized_lot_nr},
+        )
+        if isinstance(data, dict):
+            return data
+        raise RuntimeError("Unexpected spool update response format from Spoolman.")
+
     async def list_vendors(self) -> list[dict[str, Any]]:
         data = await self._first_ok(["/api/v1/vendor", "/api/v1/vendors"])
         if isinstance(data, list):
@@ -143,6 +197,22 @@ class SpoolmanClient:
         if value is None:
             return ""
         return str(value).strip().casefold()
+
+    @staticmethod
+    def _normalize_lot_nr(value: Any) -> str:
+        if value is None:
+            return ""
+        text = str(value).strip()
+        if not text:
+            return ""
+
+        normalized = text.casefold()
+        if normalized.startswith("0x"):
+            normalized = normalized[2:]
+        normalized = normalized.replace(":", "").replace("-", "").replace(" ", "")
+        if normalized and all(char in "0123456789abcdef" for char in normalized):
+            return f"0x{normalized}"
+        return text
 
     @staticmethod
     def _resolve_import_external_id(imported: dict[str, Any]) -> str:

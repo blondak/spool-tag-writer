@@ -23,11 +23,16 @@ defineProps({
     type: Boolean,
     default: false,
   },
+  u1ReadBusy: {
+    type: Boolean,
+    default: false,
+  },
 });
 
 const emit = defineEmits([
   "update:extruderCount",
   "update:slotSpool",
+  "load-from-u1",
   "open-tag-tools",
 ]);
 
@@ -109,6 +114,14 @@ const extruderCountOptions = Array.from({ length: 12 }, (_, index) => index + 1)
               </span>
 
               <div class="btn-group">
+                <button
+                  type="button"
+                  class="btn btn-outline-primary btn-sm"
+                  :disabled="busy || u1ReadBusy"
+                  @click="emit('load-from-u1', slot)"
+                >
+                  <i class="bi bi-router"></i>
+                </button>
                 <button
                   type="button"
                   class="btn btn-outline-secondary btn-sm"

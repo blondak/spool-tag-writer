@@ -232,6 +232,39 @@ a {
   align-items: center;
   justify-content: flex-end;
   gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.rfid-pairing-grid {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 1rem;
+}
+
+.rfid-pairing-controls {
+  min-width: 8rem;
+}
+
+.rfid-pairing-status {
+  min-width: 0;
+}
+
+.rfid-pairing-status .spool-picker {
+  max-width: 34rem;
+}
+
+.rfid-pairing-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.rfid-pairing-status .badge {
+  max-width: 100%;
+  white-space: normal;
 }
 
 .json-block {
@@ -276,4 +309,15 @@ a {
 
 .nav-tabs .nav-link {
   cursor: pointer;
+}
+
+@media (max-width: 991.98px) {
+  .rfid-pairing-grid {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .rfid-pairing-actions {
+    justify-content: flex-start;
+  }
 }

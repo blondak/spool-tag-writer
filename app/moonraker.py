@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 from urllib.parse import urlparse
 
@@ -12,6 +13,9 @@ EXTRUDER_MAPPING_NAMESPACE = "spool_tag_writer"
 EXTRUDER_MAPPING_KEY = "extruder_mapping"
 DEFAULT_EXTRUDER_COUNT = 4
 MAX_EXTRUDER_COUNT = 12
+DEFAULT_FILAMENT_CHANNEL_COUNT = 4
+MAX_FILAMENT_CHANNEL = DEFAULT_FILAMENT_CHANNEL_COUNT - 1
+FILAMENT_DT_QUERY_DELAY_SECONDS = 0.25
 
 
 def tool_name_for_index(index: int) -> str:
@@ -26,6 +30,16 @@ def clamp_extruder_count(value: Any) -> int:
     return max(1, min(MAX_EXTRUDER_COUNT, numeric))
 
 
+def parse_filament_channel(value: Any) -> int:
+    try:
+        numeric = int(value)
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError("RFID channel must be an integer between 0 and 3.") from exc
+    if numeric < 0 or numeric > MAX_FILAMENT_CHANNEL:
+        raise RuntimeError("RFID channel must be between 0 and 3.")
+    return numeric
+
+
 def coerce_spool_id(value: Any) -> int | None:
     if value is None:
         return None
@@ -37,6 +51,71 @@ def coerce_spool_id(value: Any) -> int | None:
     except ValueError:
         return None
     return numeric if numeric > 0 else None
+
+
+def _normalize_filament_detect_text(value: Any) -> str:
+    if value is None:
+        return ""
+    text = str(value).strip()
+    return "" if text.casefold() == "none" else text
+
+
+def normalize_card_uid(value: Any) -> str:
+    if isinstance(value, list):
+        parts: list[str] = []
+        for item in value:
+            try:
+                numeric = int(item)
+            except (TypeError, ValueError):
+                return ""
+            if numeric < 0 or numeric > 255:
+                return ""
+            parts.append(f"{numeric:02x}")
+        return f"0x{''.join(parts)}" if parts else ""
+
+    if isinstance(value, int):
+        return "" if value <= 0 else f"0x{value:x}"
+
+    text = str(value or "").strip()
+    if not text or text == "0":
+        return ""
+    normalized = text.casefold()
+    if normalized.startswith("0x"):
+        normalized = normalized[2:]
+    normalized = normalized.replace(":", "").replace("-", "").replace(" ", "")
+    if not normalized or any(char not in "0123456789abcdef" for char in normalized):
+        return ""
+    return f"0x{normalized}"
+
+
+def serialize_filament_detect_channel(channel: int, filament_detect: dict[str, Any]) -> dict[str, Any]:
+    info_list = filament_detect.get("info")
+    state_list = filament_detect.get("state")
+    info = (
+        info_list[channel]
+        if isinstance(info_list, list) and channel < len(info_list) and isinstance(info_list[channel], dict)
+        else {}
+    )
+    state = (
+        state_list[channel]
+        if isinstance(state_list, list) and channel < len(state_list)
+        else None
+    )
+    card_uid = normalize_card_uid(info.get("CARD_UID"))
+    return {
+        "channel": channel,
+        "label": f"T{channel}",
+        "state": state,
+        "present": bool(card_uid),
+        "card_uid": card_uid,
+        "card_uid_raw": info.get("CARD_UID"),
+        "vendor": _normalize_filament_detect_text(info.get("VENDOR")),
+        "manufacturer": _normalize_filament_detect_text(info.get("MANUFACTURER")),
+        "main_type": _normalize_filament_detect_text(info.get("MAIN_TYPE")),
+        "sub_type": _normalize_filament_detect_text(info.get("SUB_TYPE")),
+        "official": bool(info.get("OFFICIAL")),
+        "raw": info,
+    }
 
 
 def normalize_extruder_mapping(value: Any) -> dict[str, Any]:
@@ -216,6 +295,65 @@ class MoonrakerClient:
         )
         value = data.get("value") if isinstance(data, dict) else data
         return serialize_extruder_mapping(value)
+
+    async def run_gcode_script(self, script: str) -> Any:
+        return await self._request(
+            "POST",
+            "/printer/gcode/script",
+            json_payload={"script": script},
+        )
+
+    async def refresh_filament_detect_channel(self, channel: int) -> None:
+        validated_channel = parse_filament_channel(channel)
+        await self.run_gcode_script(f"FILAMENT_DT_UPDATE CHANNEL={validated_channel}")
+        await asyncio.sleep(FILAMENT_DT_QUERY_DELAY_SECONDS)
+        await self.run_gcode_script(f"FILAMENT_DT_QUERY CHANNEL={validated_channel}")
+
+    async def get_filament_detect_channels(
+        self,
+        *,
+        refresh_channels: list[int] | None = None,
+    ) -> list[dict[str, Any]]:
+        if refresh_channels:
+            for channel in dict.fromkeys(parse_filament_channel(value) for value in refresh_channels):
+                await self.refresh_filament_detect_channel(channel)
+
+        data = await self._request("GET", "/printer/objects/query?filament_detect")
+        if not isinstance(data, dict):
+            raise RuntimeError("Unexpected Moonraker filament_detect response.")
+
+        status = data.get("status")
+        if not isinstance(status, dict):
+            raise RuntimeError("Moonraker filament_detect response does not contain status.")
+
+        filament_detect = status.get("filament_detect")
+        if not isinstance(filament_detect, dict):
+            raise RuntimeError("Moonraker did not expose the filament_detect object.")
+
+        info_list = filament_detect.get("info")
+        channel_count = (
+            len(info_list)
+            if isinstance(info_list, list) and info_list
+            else DEFAULT_FILAMENT_CHANNEL_COUNT
+        )
+        return [
+            serialize_filament_detect_channel(channel, filament_detect)
+            for channel in range(channel_count)
+        ]
+
+    async def get_filament_detect_channel(
+        self,
+        channel: int,
+        *,
+        refresh: bool = False,
+    ) -> dict[str, Any]:
+        validated_channel = parse_filament_channel(channel)
+        channels = await self.get_filament_detect_channels(
+            refresh_channels=[validated_channel] if refresh else None
+        )
+        if validated_channel >= len(channels):
+            raise RuntimeError(f"Moonraker returned only {len(channels)} RFID channels.")
+        return channels[validated_channel]
 
     async def get_spoolman_status(self) -> dict[str, Any]:
         data = await self._request("GET", "/server/spoolman/status")
