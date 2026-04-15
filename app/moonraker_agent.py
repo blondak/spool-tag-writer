@@ -9,7 +9,12 @@ import websockets
 from websockets.exceptions import ConnectionClosed
 
 from .config import Settings, get_settings
-from .moonraker import resolve_spoolman_url
+from .moonraker import (
+    EXTRUDER_MAPPING_KEY,
+    EXTRUDER_MAPPING_NAMESPACE,
+    resolve_spoolman_url,
+    serialize_extruder_mapping,
+)
 from .nfc import build_nfc_backend
 from .openspool import apply_openspool_overrides, build_openspool_payload
 from .spoolman import SpoolmanClient
@@ -74,6 +79,15 @@ class MoonrakerAgent:
                 }
             )
         )
+
+    async def _run_gcode_script(self, ws, script: str) -> Any:
+        return await self._rpc_call(ws, "printer.gcode.script", {"script": script})
+
+    async def _respond_info(self, ws, message: str) -> None:
+        safe_message = str(message).replace('"', "'").replace("\n", " ").strip()
+        if not safe_message:
+            return
+        await self._run_gcode_script(ws, f'RESPOND TYPE=echo MSG="{safe_message}"')
 
     @staticmethod
     def _extract_spool_id(params: Any) -> int | None:
@@ -201,8 +215,56 @@ class MoonrakerAgent:
             "readback": readback,
         }
 
+    async def _get_fallback_mapping(self, ws) -> dict[str, Any]:
+        try:
+            result = await self._rpc_call(
+                ws,
+                "server.database.get_item",
+                {
+                    "namespace": EXTRUDER_MAPPING_NAMESPACE,
+                    "key": EXTRUDER_MAPPING_KEY,
+                },
+            )
+        except RuntimeError as exc:
+            if "does not exist" in str(exc).casefold() or "404" in str(exc):
+                return serialize_extruder_mapping({})
+            raise
+        value = result.get("value") if isinstance(result, dict) else result
+        return serialize_extruder_mapping(value)
+
+    async def _show_fallback_mapping(self, ws) -> dict[str, Any]:
+        mapping = await self._get_fallback_mapping(ws)
+        lines = ["Spool Tag Writer fallback mapping:"]
+        for slot in mapping.get("slots", []):
+            if not isinstance(slot, dict):
+                continue
+            label = str(slot.get("label") or f"T{slot.get('index', '?')}")
+            tool_name = str(slot.get("tool_name") or "?")
+            spool_id = slot.get("spool_id")
+            if spool_id:
+                lines.append(f"{label} ({tool_name}) -> spool #{spool_id}")
+            else:
+                lines.append(f"{label} ({tool_name}) -> unassigned")
+
+        for line in lines:
+            await self._respond_info(ws, line)
+        return mapping
+
     async def _handle_message(self, ws, message: dict[str, Any]) -> None:
         method = message.get("method")
+        if method == self.settings.moonraker_show_mapping_agent_method or method == self.settings.moonraker_show_mapping_remote_method:
+            msg_id = message.get("id")
+            try:
+                result = await self._show_fallback_mapping(ws)
+                if msg_id is not None:
+                    await self._send_result(ws, msg_id, result)
+            except Exception as exc:
+                error_text = str(exc)
+                LOG.exception("Fallback mapping display request failed: %s", error_text)
+                if msg_id is not None:
+                    await self._send_error(ws, msg_id, error_text)
+            return
+
         if method not in {
             self.settings.moonraker_agent_method,
             self.settings.moonraker_remote_method,
@@ -250,9 +312,15 @@ class MoonrakerAgent:
             "connection.register_remote_method",
             {"method_name": self.settings.moonraker_remote_method},
         )
+        await self._rpc_call(
+            ws,
+            "connection.register_remote_method",
+            {"method_name": self.settings.moonraker_show_mapping_remote_method},
+        )
         LOG.info(
-            "Connected to Moonraker, remote method registered: %s",
+            "Connected to Moonraker, remote methods registered: %s, %s",
             self.settings.moonraker_remote_method,
+            self.settings.moonraker_show_mapping_remote_method,
         )
 
     async def run_forever(self) -> None:

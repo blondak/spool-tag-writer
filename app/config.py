@@ -28,6 +28,8 @@ class Settings(BaseSettings):
     moonraker_client_url: str = "https://local/spool-tag-writer"
     moonraker_agent_method: str = "spool_tag_writer.write_spool_tag"
     moonraker_remote_method: str = "spool_tag_writer_write_spool_tag"
+    moonraker_show_mapping_agent_method: str = "spool_tag_writer.show_fallback_mapping"
+    moonraker_show_mapping_remote_method: str = "spool_tag_writer_show_fallback_mapping"
 
 
 @lru_cache(maxsize=1)

@@ -76,6 +76,16 @@ cd /home/lava/printer_data/apps/spool-tag-writer
 ./scripts/u1-update.sh --github-release <version>
 ```
 
+## Klipper macro
+
+Example Klipper macros are in [examples/printer_macro_spool_tag_writer.cfg](examples/printer_macro_spool_tag_writer.cfg).
+
+The file includes:
+- `WRITE_SPOOL_TAG` for writing the active or selected spool to NFC
+- `SHOW_FALLBACK_MAPPING` for printing the current fallback extruder mapping into the Klipper console
+
+`SHOW_FALLBACK_MAPPING` requires Klipper `[respond]` to be enabled.
+
 ## Notes
 
 - `Moonraker` should typically stay on `ws://127.0.0.1:7125/websocket`.

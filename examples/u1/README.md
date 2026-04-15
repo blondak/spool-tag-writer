@@ -113,6 +113,26 @@ Logs:
 /home/lava/printer_data/system/spool-tag-writer/agent.log
 ```
 
+## Klipper macro integration
+
+Example macros are provided in [../printer_macro_spool_tag_writer.cfg](../printer_macro_spool_tag_writer.cfg).
+
+The file includes:
+- `WRITE_SPOOL_TAG`
+- `SHOW_FALLBACK_MAPPING`
+
+`SHOW_FALLBACK_MAPPING` calls the Moonraker agent and prints the current fallback mapping into the Klipper console, for example:
+
+```text
+Spool Tag Writer fallback mapping:
+T0 (extruder) -> spool #29
+T1 (extruder1) -> spool #26
+T2 (extruder2) -> unassigned
+T3 (extruder3) -> unassigned
+```
+
+Enable Klipper `[respond]` before using that macro, otherwise the console output will not be visible.
+
 ## 5. Update process from GitHub
 
 Update the deployed checkout in place:
