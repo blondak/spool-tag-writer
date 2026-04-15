@@ -12,9 +12,6 @@ on:
 permissions:
   contents: write
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
 jobs:
   build-and-package:
     runs-on: ubuntu-latest
@@ -68,10 +65,30 @@ jobs:
 
       - name: Publish GitHub release assets
         if: github.ref_type == 'tag'
-        uses: softprops/action-gh-release@v2.5.0
-        with:
-          tag_name: ${{ github.ref_name }}
-          prerelease: ${{ contains(github.ref_name, '-') }}
-          files: |
-            dist/u1/${{ steps.meta.outputs.package_file }}
-            dist/u1/${{ steps.meta.outputs.package_file }}.sha256
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ github.ref_name }}
+          PACKAGE_FILE: dist/u1/${{ steps.meta.outputs.package_file }}
+          PACKAGE_SHA256_FILE: dist/u1/${{ steps.meta.outputs.package_file }}.sha256
+        shell: bash
+        run: |
+          if gh release view "$TAG_NAME" >/dev/null 2>&1; then
+            gh release upload "$TAG_NAME" "$PACKAGE_FILE" "$PACKAGE_SHA256_FILE" --clobber
+            exit 0
+          fi
+
+          release_args=(
+            release
+            create
+            "$TAG_NAME"
+            "$PACKAGE_FILE"
+            "$PACKAGE_SHA256_FILE"
+            --title "$TAG_NAME"
+            --verify-tag
+          )
+
+          if [[ "$TAG_NAME" == *-* ]]; then
+            release_args+=(--prerelease)
+          fi
+
+          gh "${release_args[@]}"

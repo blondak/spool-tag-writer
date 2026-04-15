@@ -8,16 +8,24 @@ usage() {
   cat <<'EOF'
 Usage:
   u1-update.sh [git-ref]
+  u1-update.sh --github-release <tag>
   u1-update.sh --package-url <url> [--package-header <hdr> ...]
 EOF
 }
 
+DEFAULT_RELEASE_BASE_URL="https://github.com/blondak/spool-tag-writer/releases/download"
+
 TARGET_REF=""
+GITHUB_RELEASE_TAG=""
 PACKAGE_URL=""
 PACKAGE_HEADERS=()
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --github-release)
+      GITHUB_RELEASE_TAG="${2:-}"
+      shift 2
+      ;;
     --package-url)
       PACKAGE_URL="${2:-}"
       shift 2
@@ -41,6 +49,16 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if [[ -n "$GITHUB_RELEASE_TAG" ]]; then
+  PACKAGE_URL="${DEFAULT_RELEASE_BASE_URL}/${GITHUB_RELEASE_TAG}/spool-tag-writer-u1-${GITHUB_RELEASE_TAG}.tar.gz"
+fi
+
+if [[ -n "$TARGET_REF" && -n "$PACKAGE_URL" ]]; then
+  echo "Use either a git ref, --github-release, or --package-url." >&2
+  usage >&2
+  exit 2
+fi
 
 if [[ -f "$ROOT_DIR/.env" ]]; then
   set -a

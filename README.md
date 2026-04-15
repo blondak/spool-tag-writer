@@ -29,15 +29,15 @@ touch /oem/.debug
 From the printer shell, install from a GitHub release asset:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/<org>/<repo>/main/scripts/u1-bootstrap.sh | bash -s -- \
-  --package-url https://github.com/<org>/<repo>/releases/download/<version>/spool-tag-writer-u1-<version>.tar.gz \
+curl -fsSL https://raw.githubusercontent.com/blondak/spool-tag-writer/main/scripts/u1-bootstrap.sh | bash -s -- \
+  --github-release <version> \
   --spoolman-url http://spoolman.local:7912
 ```
 
-For a private GitHub repository add:
+Equivalent explicit package URL:
 
-```bash
-  --package-header "Authorization: Bearer <token>"
+```text
+https://github.com/blondak/spool-tag-writer/releases/download/<version>/spool-tag-writer-u1-<version>.tar.gz
 ```
 
 The installer:
@@ -67,8 +67,7 @@ To update an existing install to a newer packaged release:
 
 ```bash
 cd /home/lava/printer_data/apps/spool-tag-writer
-./scripts/u1-update.sh \
-  --package-url https://github.com/<org>/<repo>/releases/download/<version>/spool-tag-writer-u1-<version>.tar.gz
+./scripts/u1-update.sh --github-release <version>
 ```
 
 ## Notes

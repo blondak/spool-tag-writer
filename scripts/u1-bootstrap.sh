@@ -4,9 +4,10 @@ set -euo pipefail
 usage() {
   cat <<'EOF'
 Usage:
-  u1-bootstrap.sh (--repo-url <git-url> | --package-url <url>) [options]
+  u1-bootstrap.sh (--github-release <tag> | --repo-url <git-url> | --package-url <url>) [options]
 
 Options:
+  --github-release <tag> Use a GitHub release asset from blondak/spool-tag-writer.
   --repo-url <url>        Git repository URL to clone or update.
   --package-url <url>     Prebuilt U1 package (.tar.gz) URL to download and install.
   --ref <name>            Branch or tag to deploy. Default: main
@@ -20,6 +21,8 @@ Options:
   --help                  Show this help.
 EOF
 }
+
+DEFAULT_RELEASE_BASE_URL="https://github.com/blondak/spool-tag-writer/releases/download"
 
 require_command() {
   if ! command -v "$1" >/dev/null 2>&1; then
@@ -42,6 +45,7 @@ set_env_value() {
 
 REPO_URL=""
 PACKAGE_URL=""
+GITHUB_RELEASE_TAG=""
 REPO_REF="main"
 APP_DIR="/home/lava/printer_data/apps/spool-tag-writer"
 APP_USER="lava"
@@ -52,6 +56,10 @@ PACKAGE_HEADERS=()
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --github-release)
+      GITHUB_RELEASE_TAG="${2:-}"
+      shift 2
+      ;;
     --repo-url)
       REPO_URL="${2:-}"
       shift 2
@@ -100,14 +108,23 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ -z "$REPO_URL" && -z "$PACKAGE_URL" ]]; then
-  echo "Either --repo-url or --package-url is required." >&2
+if [[ -n "$GITHUB_RELEASE_TAG" ]]; then
+  PACKAGE_URL="${DEFAULT_RELEASE_BASE_URL}/${GITHUB_RELEASE_TAG}/spool-tag-writer-u1-${GITHUB_RELEASE_TAG}.tar.gz"
+fi
+
+SOURCE_COUNT=0
+[[ -n "$GITHUB_RELEASE_TAG" ]] && SOURCE_COUNT=$((SOURCE_COUNT + 1))
+[[ -n "$REPO_URL" ]] && SOURCE_COUNT=$((SOURCE_COUNT + 1))
+[[ -n "$PACKAGE_URL" && -z "$GITHUB_RELEASE_TAG" ]] && SOURCE_COUNT=$((SOURCE_COUNT + 1))
+
+if [[ $SOURCE_COUNT -eq 0 ]]; then
+  echo "Either --github-release, --repo-url, or --package-url is required." >&2
   usage >&2
   exit 2
 fi
 
-if [[ -n "$REPO_URL" && -n "$PACKAGE_URL" ]]; then
-  echo "Use either --repo-url or --package-url, not both." >&2
+if [[ $SOURCE_COUNT -gt 1 ]]; then
+  echo "Use only one of --github-release, --repo-url, or --package-url." >&2
   usage >&2
   exit 2
 fi

@@ -31,7 +31,7 @@ touch /oem/.debug
 ssh root@<printer-ip>
 mkdir -p /home/lava/printer_data/apps
 cd /home/lava/printer_data/apps
-git clone https://github.com/<your-org>/<your-repo>.git spool-tag-writer
+git clone https://github.com/blondak/spool-tag-writer.git spool-tag-writer
 cd spool-tag-writer
 cp examples/u1/.env.u1.example .env
 ```
@@ -46,28 +46,28 @@ Edit `.env`:
 The recommended path is a prebuilt GitHub release asset, so the printer does not need to build the frontend:
 
 ```text
-https://github.com/<org>/<repo>/releases/download/<version>/spool-tag-writer-u1-<version>.tar.gz
+https://github.com/blondak/spool-tag-writer/releases/download/<version>/spool-tag-writer-u1-<version>.tar.gz
 ```
 
 Bootstrap from that package:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/<org>/<repo>/main/scripts/u1-bootstrap.sh | bash -s -- \
-  --package-url https://github.com/<org>/<repo>/releases/download/v1.0.0/spool-tag-writer-u1-v1.0.0.tar.gz \
+curl -fsSL https://raw.githubusercontent.com/blondak/spool-tag-writer/main/scripts/u1-bootstrap.sh | bash -s -- \
+  --github-release <version> \
   --spoolman-url http://spoolman.local:7912
 ```
 
-For private GitHub repositories add a header, for example:
+Equivalent explicit package URL:
 
-```bash
-  --package-header "Authorization: Bearer <token>"
+```text
+https://github.com/blondak/spool-tag-writer/releases/download/<version>/spool-tag-writer-u1-<version>.tar.gz
 ```
 
 If you prefer to bootstrap directly from Git instead, you can still do:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/<org>/<repo>/main/scripts/u1-bootstrap.sh | bash -s -- \
-  --repo-url https://github.com/<org>/<repo>.git \
+curl -fsSL https://raw.githubusercontent.com/blondak/spool-tag-writer/main/scripts/u1-bootstrap.sh | bash -s -- \
+  --repo-url https://github.com/blondak/spool-tag-writer.git \
   --ref main \
   --spoolman-url http://spoolman.local:7912
 ```
@@ -134,8 +134,7 @@ Package-based update without building on the printer:
 
 ```bash
 cd /home/lava/printer_data/apps/spool-tag-writer
-./scripts/u1-update.sh \
-  --package-url https://github.com/<org>/<repo>/releases/download/v1.0.0/spool-tag-writer-u1-v1.0.0.tar.gz
+./scripts/u1-update.sh --github-release <version>
 ```
 
 The update script:
