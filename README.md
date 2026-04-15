@@ -31,7 +31,6 @@ From the printer shell, install from a GitHub release asset:
 ```bash
 curl -fsSL https://raw.githubusercontent.com/blondak/spool-tag-writer/main/scripts/u1-bootstrap.sh | bash -s -- \
   --github-release <version> \
-  --spoolman-url http://spoolman.local:7912
 ```
 
 Equivalent explicit package URL:
@@ -46,6 +45,7 @@ The installer:
 - installs dependencies
 - installs the web and agent init scripts
 - prepares the app for startup on the printer
+- auto-detects `SPOOLMAN_URL` from Moonraker `[spoolman] server` when available
 
 ### 3. Open the UI
 
@@ -74,6 +74,7 @@ cd /home/lava/printer_data/apps/spool-tag-writer
 
 - `Moonraker` should typically stay on `ws://127.0.0.1:7125/websocket`.
 - `Spoolman` can run on the printer or elsewhere on the network.
+- `SPOOLMAN_URL=auto` tells the app to resolve the URL from Moonraker `[spoolman]`.
 - The NFC reader can be local to the printer or moved to another machine via a dedicated bridge service.
 - `GitHub Actions` builds the frontend on pushes and pull requests; tag builds also publish the packaged U1 release assets.
 

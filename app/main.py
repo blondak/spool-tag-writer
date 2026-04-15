@@ -10,6 +10,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .config import Settings, get_settings
+from .moonraker import resolve_spoolman_url
 from .nfc import NfcError, build_nfc_backend
 from .openspool import apply_openspool_overrides, build_openspool_payload
 from .prusament import PrusamentImportError, import_prusament_url
@@ -25,6 +26,7 @@ FRONTEND_INDEX_FILE = FRONTEND_DIST_DIR / "index.html"
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_settings()
+    settings.spoolman_url = await resolve_spoolman_url(settings)
     app.state.settings = settings
     app.state.spoolman = SpoolmanClient(settings)
     app.state.nfc = build_nfc_backend(settings)
@@ -231,6 +233,7 @@ async def api_ui_context(request: Request):
     return {
         "nfc_backend": settings.nfc_backend,
         "nfc_reader_name": settings.nfc_reader_name,
+        "spoolman_url": settings.spoolman_url,
     }
 
 

@@ -9,6 +9,7 @@ import websockets
 from websockets.exceptions import ConnectionClosed
 
 from .config import Settings, get_settings
+from .moonraker import resolve_spoolman_url
 from .nfc import build_nfc_backend
 from .openspool import apply_openspool_overrides, build_openspool_payload
 from .spoolman import SpoolmanClient
@@ -284,6 +285,7 @@ class MoonrakerAgent:
 
 async def _run() -> None:
     settings = get_settings()
+    settings.spoolman_url = await resolve_spoolman_url(settings)
     agent = MoonrakerAgent(settings)
     try:
         await agent.run_forever()

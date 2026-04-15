@@ -37,7 +37,7 @@ cp examples/u1/.env.u1.example .env
 ```
 
 Edit `.env`:
-- set `SPOOLMAN_URL`
+- keep `SPOOLMAN_URL=auto` to discover the URL from Moonraker `[spoolman]`
 - keep `MOONRAKER_WS_URL=ws://127.0.0.1:7125/websocket`
 - keep `NFC_BACKEND=mock` unless you really attach an external PC/SC reader to the printer
 
@@ -53,8 +53,7 @@ Bootstrap from that package:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/blondak/spool-tag-writer/main/scripts/u1-bootstrap.sh | bash -s -- \
-  --github-release <version> \
-  --spoolman-url http://spoolman.local:7912
+  --github-release <version>
 ```
 
 Equivalent explicit package URL:
@@ -68,11 +67,11 @@ If you prefer to bootstrap directly from Git instead, you can still do:
 ```bash
 curl -fsSL https://raw.githubusercontent.com/blondak/spool-tag-writer/main/scripts/u1-bootstrap.sh | bash -s -- \
   --repo-url https://github.com/blondak/spool-tag-writer.git \
-  --ref main \
-  --spoolman-url http://spoolman.local:7912
+  --ref main
 ```
 
 Optional flags:
+- `--spoolman-url http://spoolman.local:7912` to override Moonraker discovery
 - `--app-port 18080`
 - `--app-dir /home/lava/printer_data/apps/spool-tag-writer`
 - `--force-env-update`

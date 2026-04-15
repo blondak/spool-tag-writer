@@ -121,6 +121,27 @@ def derive_moonraker_http_url(settings: Settings) -> str:
     return f"{scheme}://{parsed.netloc}"
 
 
+def should_discover_spoolman_url(settings: Settings) -> bool:
+    configured = str(getattr(settings, "spoolman_url", "") or "").strip()
+    return not configured or configured.casefold() == "auto"
+
+
+def extract_spoolman_url_from_server_config(payload: Any) -> str | None:
+    if not isinstance(payload, dict):
+        return None
+    config = payload.get("config")
+    if not isinstance(config, dict):
+        return None
+    spoolman = config.get("spoolman")
+    if not isinstance(spoolman, dict):
+        return None
+    server_value = spoolman.get("server")
+    if server_value is None:
+        return None
+    text = str(server_value).strip()
+    return text.rstrip("/") if text else None
+
+
 class MoonrakerClient:
     def __init__(self, settings: Settings) -> None:
         headers: dict[str, str] = {}
@@ -171,6 +192,13 @@ class MoonrakerClient:
             raise RuntimeError(f"Moonraker database request failed: {exc}") from exc
         value = data.get("value") if isinstance(data, dict) else data
         return serialize_extruder_mapping(value)
+
+    async def get_server_config(self) -> dict[str, Any]:
+        data = await self._request("GET", "/server/config")
+        return data if isinstance(data, dict) else {}
+
+    async def get_spoolman_server_url(self) -> str | None:
+        return extract_spoolman_url_from_server_config(await self.get_server_config())
 
     async def save_extruder_mapping(self, mapping: dict[str, Any]) -> dict[str, Any]:
         normalized = serialize_extruder_mapping(mapping)
@@ -241,3 +269,23 @@ class MoonrakerClient:
             "assignments": mapping["assignments"],
             "slots": mapping["slots"],
         }
+
+
+async def resolve_spoolman_url(settings: Settings) -> str:
+    configured = str(getattr(settings, "spoolman_url", "") or "").strip()
+    if configured and configured.casefold() != "auto":
+        return configured.rstrip("/")
+
+    moonraker = MoonrakerClient(settings)
+    try:
+        discovered = await moonraker.get_spoolman_server_url()
+    finally:
+        await moonraker.close()
+
+    if discovered:
+        return discovered
+
+    raise RuntimeError(
+        "SPOOLMAN_URL is not configured and Moonraker did not provide [spoolman] server. "
+        "Set SPOOLMAN_URL explicitly or configure Moonraker [spoolman]."
+    )

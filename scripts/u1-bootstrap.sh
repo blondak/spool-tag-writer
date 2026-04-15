@@ -31,6 +31,16 @@ require_command() {
   fi
 }
 
+read_env_value() {
+  local file="$1"
+  local key="$2"
+  local line=""
+  if [[ -f "$file" ]]; then
+    line="$(grep -E "^${key}=" "$file" | tail -n 1 || true)"
+  fi
+  printf '%s' "${line#*=}"
+}
+
 set_env_value() {
   local file="$1"
   local key="$2"
@@ -41,6 +51,75 @@ set_env_value() {
   else
     printf '%s=%s\n' "$key" "$value" >>"$file"
   fi
+}
+
+derive_moonraker_http_url() {
+  local env_file="$1"
+  local explicit_url
+  local ws_url
+
+  explicit_url="$(read_env_value "$env_file" "MOONRAKER_HTTP_URL")"
+  if [[ -n "$explicit_url" ]]; then
+    printf '%s\n' "${explicit_url%/}"
+    return 0
+  fi
+
+  ws_url="$(read_env_value "$env_file" "MOONRAKER_WS_URL")"
+  if [[ -z "$ws_url" ]]; then
+    ws_url="ws://127.0.0.1:7125/websocket"
+  fi
+
+  python3 - "$ws_url" <<'PY'
+import sys
+from urllib.parse import urlparse
+
+raw = sys.argv[1].strip()
+parsed = urlparse(raw)
+if not parsed.scheme or not parsed.netloc:
+    raise SystemExit(1)
+scheme = "https" if parsed.scheme == "wss" else "http"
+print(f"{scheme}://{parsed.netloc}")
+PY
+}
+
+discover_spoolman_url_from_moonraker() {
+  local env_file="$1"
+  local moonraker_http_url
+  local moonraker_api_key
+  local response
+  local curl_args=(-fsSL)
+
+  moonraker_http_url="$(derive_moonraker_http_url "$env_file" 2>/dev/null || true)"
+  if [[ -z "$moonraker_http_url" ]]; then
+    return 0
+  fi
+
+  moonraker_api_key="$(read_env_value "$env_file" "MOONRAKER_API_KEY")"
+  if [[ -n "$moonraker_api_key" ]]; then
+    curl_args+=(-H "X-Api-Key: $moonraker_api_key")
+  fi
+
+  response="$(curl "${curl_args[@]}" "${moonraker_http_url%/}/server/config" 2>/dev/null || true)"
+  if [[ -z "$response" ]]; then
+    return 0
+  fi
+
+  printf '%s' "$response" | python3 - <<'PY'
+import json
+import sys
+
+try:
+    payload = json.load(sys.stdin)
+except json.JSONDecodeError:
+    raise SystemExit(0)
+
+result = payload.get("result")
+config = result.get("config") if isinstance(result, dict) else None
+spoolman = config.get("spoolman") if isinstance(config, dict) else None
+server = spoolman.get("server") if isinstance(spoolman, dict) else None
+if server:
+    print(str(server).rstrip("/"))
+PY
 }
 
 REPO_URL=""
@@ -183,6 +262,13 @@ if [[ ! -f "$ENV_FILE" ]]; then
   CREATED_ENV=1
 else
   CREATED_ENV=0
+fi
+
+if [[ -z "$SPOOLMAN_URL" && ( $CREATED_ENV -eq 1 || $FORCE_ENV_UPDATE -eq 1 ) ]]; then
+  SPOOLMAN_URL="$(discover_spoolman_url_from_moonraker "$ENV_FILE" || true)"
+  if [[ -n "$SPOOLMAN_URL" ]]; then
+    echo "Discovered SPOOLMAN_URL from Moonraker: $SPOOLMAN_URL"
+  fi
 fi
 
 if [[ -n "$SPOOLMAN_URL" && ( $CREATED_ENV -eq 1 || $FORCE_ENV_UPDATE -eq 1 ) ]]; then

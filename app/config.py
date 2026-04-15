@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     request_timeout_seconds: float = 10.0
 
     moonraker_ws_url: str = "ws://127.0.0.1:7125/websocket"
+    moonraker_http_url: str | None = None
     moonraker_api_key: str | None = None
     moonraker_client_name: str = "spool-tag-writer"
     moonraker_client_version: str = "0.1.0"
