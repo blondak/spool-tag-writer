@@ -47,6 +47,12 @@ The installer:
 - prepares the app for startup on the printer
 - auto-detects `SPOOLMAN_URL` from Moonraker `[spoolman] server` when available
 
+After a future firmware upgrade, recover the app with:
+
+```bash
+ssh root@<printer-ip> 'cd /home/lava/printer_data/apps/spool-tag-writer && ./scripts/u1-recover.sh'
+```
+
 ### 3. Open the UI
 
 By default the UI is available at:

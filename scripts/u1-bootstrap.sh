@@ -297,3 +297,5 @@ else
   echo "Package:  $PACKAGE_URL"
 fi
 echo "Open UI:  http://$(hostname -I 2>/dev/null | awk '{print $1}'):${APP_PORT:-18080}/"
+echo "After a firmware upgrade run as root:"
+echo "  cd '$APP_DIR' && ./scripts/u1-recover.sh"

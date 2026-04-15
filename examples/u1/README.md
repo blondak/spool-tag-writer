@@ -172,11 +172,8 @@ If you deploy straight from Git to the printer, either build the frontend on the
 
 Firmware upgrades keep `/home/lava/printer_data`, but remove persisted system changes and clear `/oem/.debug`.
 
-Run this again after the upgrade:
+Recover the app after the upgrade with one command:
 
 ```bash
-ssh root@<printer-ip>
-touch /oem/.debug
-cd /home/lava/printer_data/apps/spool-tag-writer
-./scripts/u1-install.sh --install-services
+ssh root@<printer-ip> 'cd /home/lava/printer_data/apps/spool-tag-writer && ./scripts/u1-recover.sh'
 ```
