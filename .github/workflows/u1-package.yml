@@ -1,0 +1,74 @@
+name: U1 Package
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-package:
+    runs-on: ubuntu-latest
+    outputs:
+      package_version: ${{ steps.meta.outputs.package_version }}
+      package_file: ${{ steps.meta.outputs.package_file }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Build frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Compute package metadata
+        id: meta
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            package_version="${GITHUB_REF_NAME}"
+          else
+            branch_slug="${GITHUB_REF_NAME//\//-}"
+            package_version="${branch_slug}-${GITHUB_SHA::7}"
+          fi
+          echo "package_version=${package_version}" >>"$GITHUB_OUTPUT"
+          echo "package_file=spool-tag-writer-u1-${package_version}.tar.gz" >>"$GITHUB_OUTPUT"
+
+      - name: Create U1 package
+        shell: bash
+        run: |
+          chmod +x scripts/u1-create-package.sh
+          ./scripts/u1-create-package.sh "${{ steps.meta.outputs.package_version }}"
+
+      - name: Upload package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: spool-tag-writer-u1-${{ steps.meta.outputs.package_version }}
+          path: |
+            dist/u1/${{ steps.meta.outputs.package_file }}
+            dist/u1/${{ steps.meta.outputs.package_file }}.sha256
+          if-no-files-found: error
+
+      - name: Publish GitHub release assets
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          files: |
+            dist/u1/${{ steps.meta.outputs.package_file }}
+            dist/u1/${{ steps.meta.outputs.package_file }}.sha256

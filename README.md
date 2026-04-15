@@ -1,181 +1,81 @@
 # spool-tag-writer
 
-License: MIT
+`spool-tag-writer` is a small web app for working with filament spools, NFC spool tags, and `Spoolman` from a browser UI. It is designed to run directly on a printer such as `Snapmaker U1` with `SnapmakerU1-Extended-Firmware`, while talking to local `Moonraker` and a remote or local NFC reader.
 
-A Python application for:
-- loading spools from Spoolman,
-- building an OpenSpool JSON payload with `spoolman_id`,
-- writing the payload to NTAG215 NFC tags via ACR122U,
-- previewing data before writing and reading it back afterward,
-- integrating with Moonraker/Fluidd through a remote method.
+The application provides:
+- spool selection and extruder-to-spool mapping
+- OpenSpool tag preview, write, and readback tools
+- Prusament import helpers
+- a Moonraker-side agent for printer integration
 
-## Features
-- Web UI (`/`) built with Vue components and AdminLTE 4:
-  - `Preview NFC payload`,
-  - `Write to NFC tag`,
-  - optional overrides for `type`, `brand`, `subtype`, `min/max temp`, `bed min/max temp`, and `color_hex`,
-  - automatic prefill of available values from Spoolman after changing the selected spool,
-  - light/dark theme switch persisted in the browser.
-- Frontend and API are separated:
-  - the browser UI is served as a built SPA bundle from `app/static/dist`,
-  - Vue components call the FastAPI JSON endpoints under `/api/...`,
-  - the root page `/` only serves the frontend shell.
-- Moonraker agent:
-  - registers the `spool_tag_writer_write_spool_tag` remote method,
-  - accepts `spool_id` or tries to resolve the active spool from Moonraker.
-- Prusament import:
-  - import spool data from a Prusament QR URL,
-  - create filaments and spools in Spoolman,
-  - prepare the newly created spool for NFC writing.
-- API:
-  - `GET /api/ui-context`
-  - `GET /api/spools`
-  - `GET /api/spools/{spool_id}`
-  - `GET /api/spools/{spool_id}/overrides-defaults`
-  - `POST /api/preview?spool_id=123`
-  - `POST /api/write?spool_id=123`
-  - `POST /api/preview/with-overrides?spool_id=123&type=PLA&min_temp=190&max_temp=220`
-  - `POST /api/write/with-overrides?spool_id=123&bed_min_temp=50&bed_max_temp=60`
-  - `GET /api/tag/read`
-  - `POST /api/import/prusament?url=...`
-  - `POST /api/spoolman/filaments/create-from-prusament?url=...`
-  - `POST /api/spoolman/spools/create-from-prusament?url=...`
+## Install on Snapmaker U1
 
-## OpenSpool format
-Data is stored as an NDEF MIME record:
-- MIME type: `application/json`
-- Payload shape:
-```json
-{
-  "protocol": "openspool",
-  "version": "1.0",
-  "type": "PLA",
-  "color_hex": "946344",
-  "brand": "Spectrum",
-  "min_temp": "190",
-  "max_temp": "220",
-  "bed_min_temp": "50",
-  "bed_max_temp": "60",
-  "subtype": "Wood",
-  "spoolman_id": "15"
-}
-```
+The recommended install target is the printer itself. The simplest production workflow is to install from a prebuilt GitHub release package, so the frontend build does not happen on the printer.
 
-## Quick start
-Automatic installation:
+### 1. Enable SSH
+
+On the printer:
+- `Settings > Maintenance > Root Access > Open`
+
+Then connect:
+
 ```bash
-./scripts/install.sh
+ssh root@<printer-ip>
+touch /oem/.debug
 ```
 
-Manual installation:
+### 2. Run the bootstrap installer
+
+From the printer shell, install from a GitHub release asset:
+
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-npm install
-npm run build
-cp .env.example .env
+curl -fsSL https://raw.githubusercontent.com/<org>/<repo>/main/scripts/u1-bootstrap.sh | bash -s -- \
+  --package-url https://github.com/<org>/<repo>/releases/download/<version>/spool-tag-writer-u1-<version>.tar.gz \
+  --spoolman-url http://spoolman.local:7912
 ```
 
-Edit `.env`:
-- `APP_HOST`, `APP_PORT` for the web server bind address.
-- `SPOOLMAN_URL` for your Spoolman URL.
-- `NFC_BACKEND=pcsc` for a real ACR122U reader.
-- Use `NFC_BACKEND=mock` for testing without hardware.
-- `MOONRAKER_WS_URL` for the Moonraker websocket, usually `ws://127.0.0.1:7125/websocket`.
+For a private GitHub repository add:
 
-Run:
 ```bash
-uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload
+  --package-header "Authorization: Bearer <token>"
 ```
 
-Web UI: `http://localhost:8080`
+The installer:
+- downloads the packaged release
+- creates the Python virtualenv
+- installs dependencies
+- installs the web and agent init scripts
+- prepares the app for startup on the printer
 
-If you change the Vue/AdminLTE frontend, rebuild it before starting or reloading the FastAPI app:
+### 3. Open the UI
+
+By default the UI is available at:
+
+```text
+http://<printer-ip>:18080/
+```
+
+Logs are stored in:
+
+```text
+/home/lava/printer_data/system/spool-tag-writer/
+```
+
+## Update on the printer
+
+To update an existing install to a newer packaged release:
+
 ```bash
-npm run build
+cd /home/lava/printer_data/apps/spool-tag-writer
+./scripts/u1-update.sh \
+  --package-url https://github.com/<org>/<repo>/releases/download/<version>/spool-tag-writer-u1-<version>.tar.gz
 ```
 
-Optional frontend-only development server:
-```bash
-npm run dev
-```
+## Notes
 
-Moonraker agent:
-```bash
-python -m app.moonraker_agent
-```
+- `Moonraker` should typically stay on `ws://127.0.0.1:7125/websocket`.
+- `Spoolman` can run on the printer or elsewhere on the network.
+- The NFC reader can be local to the printer or moved to another machine via a dedicated bridge service.
+- `GitHub Actions` builds the frontend on pushes and pull requests; tag builds also publish the packaged U1 release assets.
 
-Simple script-based startup:
-```bash
-./scripts/run.sh web
-./scripts/run.sh agent
-./scripts/run.sh both
-```
-
-Optional environment variables:
-- `APP_HOST`, `APP_PORT` (defaults from `.env`)
-- `HOST`, `PORT` (runtime override for `APP_HOST/APP_PORT`)
-- `RELOAD=1` to enable `--reload`
-- `PYTHON`, `UVICORN` to override executable paths
-
-## Codex session helper
-To reconnect to the same Codex session in this project:
-- Wrapper: `./scripts/codex`
-- Save a specific session ID:
-  - `./scripts/codex --set-session 019caa13-8e4b-77d2-8646-ea3d983239ec`
-- Start it again (resume saved ID, otherwise fall back to `resume --last`):
-  - `./scripts/codex`
-
-If you want to run just `codex` in the current shell, load the alias:
-```bash
-source ./scripts/codex-alias.sh
-```
-
-## Fluidd integration via Moonraker
-Fluidd does not provide a simple plugin API for a custom panel without a fork, but this works reliably through a macro:
-
-1. Add the contents of:
-   - `examples/printer_macro_spool_tag_writer.cfg`
-2. Restart Klipper/Moonraker.
-3. Run in Fluidd:
-   - `WRITE_SPOOL_TAG` to let the agent try the active Moonraker spool,
-   - or `WRITE_SPOOL_TAG SPOOL_ID=123`,
-   - or with overrides:
-     - `WRITE_SPOOL_TAG SPOOL_ID=123 TYPE=PLA BRAND=Spectrum SUBTYPE=Wood`
-     - `WRITE_SPOOL_TAG MIN_TEMP=190 MAX_TEMP=220 BED_MIN_TEMP=50 BED_MAX_TEMP=60 COLOR_HEX=946344`
-
-The macro calls the Moonraker remote method `spool_tag_writer_write_spool_tag`, registered by the agent.
-
-Supported override parameters:
-- `TYPE`, `BRAND`, `SUBTYPE`, `MIN_TEMP`, `MAX_TEMP`, `BED_MIN_TEMP`, `BED_MAX_TEMP`, `COLOR_HEX`
-- The API variant uses: `type`, `brand`, `subtype`, `min_temp`, `max_temp`, `bed_min_temp`, `bed_max_temp`, `color_hex`
-
-Moonraker HTTP API call without the macro:
-```bash
-curl -X POST http://127.0.0.1:7125/server/extensions/request \
-  -H "Content-Type: application/json" \
-  -d '{
-    "agent": "spool-tag-writer",
-    "method": "spool_tag_writer.write_spool_tag",
-    "arguments": {"spool_id": 123}
-  }'
-```
-
-## Systemd examples
-Prepared unit files:
-- `examples/systemd/spool-tag-writer-web.service`
-- `examples/systemd/spool-tag-writer-agent.service`
-
-## Snapmaker U1 deployment
-For `SnapmakerU1-Extended-Firmware` deployment on the printer itself, including init scripts and a GitHub-based update flow, see:
-- `examples/u1/README.md`
-- bootstrap installer: `scripts/u1-bootstrap.sh`
-
-## Hardware notes
-- ACR122U must be available through PC/SC.
-- NTAG215 must be unlocked for writing.
-- The application writes NDEF TLV into NTAG215 user memory pages `4..129`.
-- Before writing, tag capacity is checked:
-  - from the tag CC bytes when available,
-  - and against the locally configured page range limit.
+For detailed printer deployment notes, see [examples/u1/README.md](examples/u1/README.md).

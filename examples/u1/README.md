@@ -41,38 +41,29 @@ Edit `.env`:
 - keep `MOONRAKER_WS_URL=ws://127.0.0.1:7125/websocket`
 - keep `NFC_BACKEND=mock` unless you really attach an external PC/SC reader to the printer
 
-## Bootstrap install from Git
+## Bootstrap install
 
-If the project is hosted on GitLab and you want the printer to install from a prebuilt package, use the GitLab Generic Package Registry URL produced by CI:
+The recommended path is a prebuilt GitHub release asset, so the printer does not need to build the frontend:
 
 ```text
-https://gitlab.com/api/v4/projects/<project-id>/packages/generic/spool-tag-writer-u1/<version>/spool-tag-writer-u1-<version>.tar.gz
+https://github.com/<org>/<repo>/releases/download/<version>/spool-tag-writer-u1-<version>.tar.gz
 ```
 
 Bootstrap from that package:
 
 ```bash
-curl -fsSL https://gitlab.com/<namespace>/<project>/-/raw/main/scripts/u1-bootstrap.sh | bash -s -- \
-  --package-url https://gitlab.com/api/v4/projects/<project-id>/packages/generic/spool-tag-writer-u1/v1.0.0/spool-tag-writer-u1-v1.0.0.tar.gz \
+curl -fsSL https://raw.githubusercontent.com/<org>/<repo>/main/scripts/u1-bootstrap.sh | bash -s -- \
+  --package-url https://github.com/<org>/<repo>/releases/download/v1.0.0/spool-tag-writer-u1-v1.0.0.tar.gz \
   --spoolman-url http://spoolman.local:7912
 ```
 
-For private GitLab projects add a header, for example:
+For private GitHub repositories add a header, for example:
 
 ```bash
-  --package-header "PRIVATE-TOKEN: <token>"
+  --package-header "Authorization: Bearer <token>"
 ```
 
 If you prefer to bootstrap directly from Git instead, you can still do:
-
-```bash
-curl -fsSL https://gitlab.com/<namespace>/<project>/-/raw/main/scripts/u1-bootstrap.sh | bash -s -- \
-  --repo-url https://gitlab.com/<namespace>/<project>.git \
-  --ref main \
-  --spoolman-url http://spoolman.local:7912
-```
-
-GitHub variant:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/<org>/<repo>/main/scripts/u1-bootstrap.sh | bash -s -- \
@@ -144,7 +135,7 @@ Package-based update without building on the printer:
 ```bash
 cd /home/lava/printer_data/apps/spool-tag-writer
 ./scripts/u1-update.sh \
-  --package-url https://gitlab.com/api/v4/projects/<project-id>/packages/generic/spool-tag-writer-u1/v1.0.0/spool-tag-writer-u1-v1.0.0.tar.gz
+  --package-url https://github.com/<org>/<repo>/releases/download/v1.0.0/spool-tag-writer-u1-v1.0.0.tar.gz
 ```
 
 The update script:
@@ -157,12 +148,13 @@ The update script:
 - compiles Python modules
 - restarts both init services if they are installed
 
-## GitLab CI package flow
+## GitHub Actions package flow
 
-The repository contains `.gitlab-ci.yml` that:
+The repository contains `.github/workflows/u1-package.yml` that:
 - builds the frontend in CI
 - assembles a U1 deployment tarball with the built `app/static/dist`
-- publishes the tarball and its `.sha256` to GitLab Generic Package Registry on tags and on the default branch
+- uploads the package as a workflow artifact on pushes and pull requests
+- publishes the tarball and its `.sha256` as GitHub release assets on tags
 
 Package version format:
 - tag pipelines: `<tag>`
@@ -176,7 +168,7 @@ The printer may not have `npm`. For that reason the branch or tag deployed to th
 app/static/dist
 ```
 
-If you deploy straight from GitHub to the printer, treat `app/static/dist` as a release artifact and push it together with the backend changes for the branch/tag used on U1.
+If you deploy straight from Git to the printer, either build the frontend on the target or use a branch/tag that already contains a ready-to-serve `app/static/dist`.
 
 ## After a firmware upgrade
 

@@ -4,3 +4,4 @@ __pycache__/
 node_modules/
 .codex/
 dist/
+README-local.md
