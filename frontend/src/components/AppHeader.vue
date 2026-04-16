@@ -14,6 +14,18 @@ defineProps({
     type: String,
     default: "",
   },
+  moonrakerToolLabel: {
+    type: String,
+    default: "—",
+  },
+  moonrakerActiveSpoolLabel: {
+    type: String,
+    default: "—",
+  },
+  moonrakerSyncOk: {
+    type: Boolean,
+    default: false,
+  },
   theme: {
     type: String,
     required: true,
@@ -55,6 +67,20 @@ const emit = defineEmits(["change-theme"]);
           <span class="nav-link text-body-secondary">
             <i class="bi bi-cpu me-1"></i>
             {{ uiContext.nfc_backend || "unknown" }}
+          </span>
+        </li>
+        <li class="nav-item d-none d-lg-block">
+          <span class="nav-link text-body-secondary">
+            <i class="bi bi-sign-turn-right me-1"></i>
+            {{ moonrakerToolLabel }}
+          </span>
+        </li>
+        <li class="nav-item d-none d-xl-block">
+          <span class="nav-link">
+            <span class="badge" :class="moonrakerSyncOk ? 'text-bg-success' : 'text-bg-warning'">
+              <i class="bi bi-link-45deg me-1"></i>
+              {{ moonrakerActiveSpoolLabel }}
+            </span>
           </span>
         </li>
         <li class="nav-item d-none d-lg-block">

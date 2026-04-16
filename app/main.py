@@ -10,7 +10,12 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .config import Settings, get_settings
-from .moonraker import MoonrakerClient, resolve_spoolman_url
+from .moonraker import (
+    MoonrakerClient,
+    is_agent_status_online,
+    resolve_spoolman_url,
+    spool_id_for_tool,
+)
 from .nfc import NfcError, build_nfc_backend
 from .openspool import apply_openspool_overrides, build_openspool_payload
 from .prusament import PrusamentImportError, import_prusament_url
@@ -259,6 +264,32 @@ async def api_get_extruder_mapping(request: Request):
 async def api_put_extruder_mapping(request: Request, mapping: dict[str, Any]):
     try:
         return await request.app.state.moonraker.save_extruder_mapping(mapping)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/moonraker/spool-sync-status")
+async def api_get_moonraker_spool_sync_status(request: Request):
+    try:
+        mapping = await request.app.state.moonraker.get_extruder_mapping()
+        active_tool = await request.app.state.moonraker.get_active_tool()
+        active_spool_id = await request.app.state.moonraker.get_active_spool_id()
+        mapped_spool_id = spool_id_for_tool(mapping, active_tool)
+        spoolman_status = await request.app.state.moonraker.get_spoolman_status()
+        agent_status = await request.app.state.moonraker.get_agent_status()
+        agent_online = is_agent_status_online(agent_status)
+        return {
+            "active_tool": active_tool,
+            "active_spool_id": active_spool_id,
+            "mapped_spool_id": mapped_spool_id,
+            "sync_ok": active_spool_id == mapped_spool_id,
+            "spoolman_connected": bool(spoolman_status.get("spoolman_connected")),
+            "agent_status": {
+                **agent_status,
+                "online": agent_online,
+                "stale": bool(agent_status.get("connected")) and not agent_online,
+            },
+        }
     except RuntimeError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

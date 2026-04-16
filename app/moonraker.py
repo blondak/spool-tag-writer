@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from urllib.parse import urlparse
 
@@ -11,11 +12,14 @@ from .config import Settings
 
 EXTRUDER_MAPPING_NAMESPACE = "spool_tag_writer"
 EXTRUDER_MAPPING_KEY = "extruder_mapping"
+AGENT_STATUS_KEY = "moonraker_agent_status"
 DEFAULT_EXTRUDER_COUNT = 4
 MAX_EXTRUDER_COUNT = 12
 DEFAULT_FILAMENT_CHANNEL_COUNT = 4
 MAX_FILAMENT_CHANNEL = DEFAULT_FILAMENT_CHANNEL_COUNT - 1
 FILAMENT_DT_QUERY_DELAY_SECONDS = 0.25
+AGENT_STATUS_HEARTBEAT_INTERVAL_SECONDS = 10
+AGENT_STATUS_STALE_AFTER_SECONDS = 30
 
 
 def tool_name_for_index(index: int) -> str:
@@ -188,6 +192,57 @@ def serialize_extruder_mapping(mapping: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def utc_now_iso() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
+
+def parse_timestamp(value: Any) -> datetime | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
+
+def serialize_agent_status(value: Any) -> dict[str, Any]:
+    source = value if isinstance(value, dict) else {}
+
+    def normalize_counter(key: str) -> int:
+        try:
+            return max(0, int(source.get(key) or 0))
+        except (TypeError, ValueError):
+            return 0
+
+    return {
+        "connected": bool(source.get("connected")),
+        "connected_at": str(source.get("connected_at") or "").strip(),
+        "last_seen_at": str(source.get("last_seen_at") or "").strip(),
+        "last_sync_at": str(source.get("last_sync_at") or "").strip(),
+        "last_switch_at": str(source.get("last_switch_at") or "").strip(),
+        "last_error": str(source.get("last_error") or "").strip(),
+        "last_error_at": str(source.get("last_error_at") or "").strip(),
+        "active_tool": str(source.get("active_tool") or "").strip(),
+        "target_spool_id": coerce_spool_id(source.get("target_spool_id")),
+        "previous_spool_id": coerce_spool_id(source.get("previous_spool_id")),
+        "active_spool_id": coerce_spool_id(source.get("active_spool_id")),
+        "sync_count": normalize_counter("sync_count"),
+        "switch_count": normalize_counter("switch_count"),
+    }
+
+
+def is_agent_status_online(status: dict[str, Any], *, now: datetime | None = None) -> bool:
+    if not status.get("connected"):
+        return False
+    last_seen_at = parse_timestamp(status.get("last_seen_at"))
+    if last_seen_at is None:
+        return False
+    current_time = now or datetime.now(timezone.utc)
+    return current_time - last_seen_at <= timedelta(seconds=AGENT_STATUS_STALE_AFTER_SECONDS)
+
+
 def derive_moonraker_http_url(settings: Settings) -> str:
     override = str(getattr(settings, "moonraker_http_url", "") or "").strip()
     if override:
@@ -272,6 +327,37 @@ class MoonrakerClient:
         value = data.get("value") if isinstance(data, dict) else data
         return serialize_extruder_mapping(value)
 
+    async def get_database_item(
+        self,
+        namespace: str,
+        key: str,
+        *,
+        default: Any = None,
+    ) -> Any:
+        try:
+            data = await self._request(
+                "GET",
+                "/server/database/item",
+                params={"namespace": namespace, "key": key},
+            )
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 404:
+                return default
+            raise RuntimeError(f"Moonraker database request failed: {exc}") from exc
+        return data.get("value") if isinstance(data, dict) else data
+
+    async def save_database_item(self, namespace: str, key: str, value: Any) -> Any:
+        data = await self._request(
+            "POST",
+            "/server/database/item",
+            json_payload={
+                "namespace": namespace,
+                "key": key,
+                "value": value,
+            },
+        )
+        return data.get("value") if isinstance(data, dict) else data
+
     async def get_server_config(self) -> dict[str, Any]:
         data = await self._request("GET", "/server/config")
         return data if isinstance(data, dict) else {}
@@ -281,20 +367,23 @@ class MoonrakerClient:
 
     async def save_extruder_mapping(self, mapping: dict[str, Any]) -> dict[str, Any]:
         normalized = serialize_extruder_mapping(mapping)
-        data = await self._request(
-            "POST",
-            "/server/database/item",
-            json_payload={
-                "namespace": EXTRUDER_MAPPING_NAMESPACE,
-                "key": EXTRUDER_MAPPING_KEY,
-                "value": {
-                    "count": normalized["count"],
-                    "assignments": normalized["assignments"],
-                },
+        data = await self.save_database_item(
+            EXTRUDER_MAPPING_NAMESPACE,
+            EXTRUDER_MAPPING_KEY,
+            {
+                "count": normalized["count"],
+                "assignments": normalized["assignments"],
             },
         )
-        value = data.get("value") if isinstance(data, dict) else data
-        return serialize_extruder_mapping(value)
+        return serialize_extruder_mapping(data)
+
+    async def get_agent_status(self) -> dict[str, Any]:
+        value = await self.get_database_item(
+            EXTRUDER_MAPPING_NAMESPACE,
+            AGENT_STATUS_KEY,
+            default={},
+        )
+        return serialize_agent_status(value)
 
     async def run_gcode_script(self, script: str) -> Any:
         return await self._request(
@@ -369,7 +458,7 @@ class MoonrakerClient:
         data = await self._request(
             "POST",
             "/server/spoolman/spool_id",
-            json_payload={"spool_id": spool_id},
+            json_payload={"spool_id": spool_id} if spool_id is not None else {},
         )
         if not isinstance(data, dict):
             return None

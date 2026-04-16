@@ -267,6 +267,42 @@ a {
   white-space: normal;
 }
 
+.sync-status-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.sync-status-item {
+  min-width: 0;
+  padding: 1rem;
+  border: 1px solid var(--lte-card-border-color);
+  border-radius: 1rem;
+  background: rgba(var(--spool-primary-rgb), 0.04);
+}
+
+.sync-status-label {
+  margin-bottom: 0.45rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--spool-muted);
+}
+
+.sync-status-value {
+  font-weight: 600;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.sync-status-meta {
+  margin-top: 0.45rem;
+  font-size: 0.82rem;
+  color: var(--spool-muted);
+  word-break: break-word;
+}
+
 .json-block {
   margin: 0;
   padding: 1rem;
@@ -315,6 +351,10 @@ a {
   .rfid-pairing-grid {
     grid-template-columns: 1fr;
     align-items: stretch;
+  }
+
+  .sync-status-grid {
+    grid-template-columns: 1fr;
   }
 
   .rfid-pairing-actions {

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 from typing import Any
@@ -10,10 +11,15 @@ from websockets.exceptions import ConnectionClosed
 
 from .config import Settings, get_settings
 from .moonraker import (
+    AGENT_STATUS_HEARTBEAT_INTERVAL_SECONDS,
+    AGENT_STATUS_KEY,
     EXTRUDER_MAPPING_KEY,
     EXTRUDER_MAPPING_NAMESPACE,
     resolve_spoolman_url,
+    serialize_agent_status,
     serialize_extruder_mapping,
+    spool_id_for_tool,
+    utc_now_iso,
 )
 from .nfc import build_nfc_backend
 from .openspool import apply_openspool_overrides, build_openspool_payload
@@ -30,6 +36,8 @@ class MoonrakerAgent:
         self.nfc = build_nfc_backend(settings)
         self._rpc_id = 0
         self._backlog: list[dict[str, Any]] = []
+        self._last_active_tool: str | None = None
+        self._status = serialize_agent_status({})
 
     def _next_rpc_id(self) -> int:
         self._rpc_id += 1
@@ -88,6 +96,40 @@ class MoonrakerAgent:
         if not safe_message:
             return
         await self._run_gcode_script(ws, f'RESPOND TYPE=echo MSG="{safe_message}"')
+
+    async def _subscribe_toolhead(self, ws) -> dict[str, Any]:
+        result = await self._rpc_call(
+            ws,
+            "printer.objects.subscribe",
+            {"objects": {"toolhead": ["extruder"]}},
+        )
+        return result if isinstance(result, dict) else {}
+
+    async def _publish_status(self, ws, **updates: Any) -> dict[str, Any]:
+        next_status = serialize_agent_status({**self._status, **updates})
+        await self._rpc_call(
+            ws,
+            "server.database.post_item",
+            {
+                "namespace": EXTRUDER_MAPPING_NAMESPACE,
+                "key": AGENT_STATUS_KEY,
+                "value": next_status,
+            },
+        )
+        self._status = next_status
+        return next_status
+
+    async def _heartbeat_loop(self, ws) -> None:
+        while True:
+            await asyncio.sleep(AGENT_STATUS_HEARTBEAT_INTERVAL_SECONDS)
+            try:
+                await self._publish_status(
+                    ws,
+                    connected=True,
+                    last_seen_at=utc_now_iso(),
+                )
+            except Exception as exc:
+                LOG.debug("Moonraker agent heartbeat update failed: %s", exc)
 
     @staticmethod
     def _extract_spool_id(params: Any) -> int | None:
@@ -232,6 +274,144 @@ class MoonrakerAgent:
         value = result.get("value") if isinstance(result, dict) else result
         return serialize_extruder_mapping(value)
 
+    async def _get_active_tool(self, ws) -> str | None:
+        result = await self._rpc_call(
+            ws,
+            "printer.objects.query",
+            {"objects": {"toolhead": ["extruder"]}},
+        )
+        if not isinstance(result, dict):
+            return None
+        status = result.get("status")
+        if not isinstance(status, dict):
+            return None
+        toolhead = status.get("toolhead")
+        if not isinstance(toolhead, dict):
+            return None
+        extruder = toolhead.get("extruder")
+        if extruder is None:
+            return None
+        text = str(extruder).strip()
+        return text or None
+
+    async def _get_active_spool_id(self, ws) -> int | None:
+        result = await self._rpc_call(ws, "server.spoolman.get_spool_id")
+        if not isinstance(result, dict):
+            return None
+        value = result.get("spool_id")
+        try:
+            if value is not None:
+                return int(value)
+        except (TypeError, ValueError):
+            return None
+        return None
+
+    async def _set_active_spool_id(self, ws, spool_id: int | None) -> int | None:
+        result = await self._rpc_call(
+            ws,
+            "server.spoolman.post_spool_id",
+            {"spool_id": spool_id} if spool_id is not None else {},
+        )
+        if not isinstance(result, dict):
+            return None
+        value = result.get("spool_id")
+        try:
+            if value is not None:
+                return int(value)
+        except (TypeError, ValueError):
+            return None
+        return None
+
+    async def _sync_active_spool_from_mapping(
+        self,
+        ws,
+        *,
+        active_tool: str | None = None,
+    ) -> dict[str, Any]:
+        mapping = await self._get_fallback_mapping(ws)
+        resolved_tool = active_tool if active_tool is not None else await self._get_active_tool(ws)
+        target_spool_id = spool_id_for_tool(mapping, resolved_tool)
+        current_spool_id = await self._get_active_spool_id(ws)
+        active_spool_id = current_spool_id
+        now = utc_now_iso()
+        status_updates: dict[str, Any] = {
+            "connected": True,
+            "last_seen_at": now,
+            "last_sync_at": now,
+            "last_error": "",
+            "last_error_at": "",
+            "active_tool": resolved_tool,
+            "target_spool_id": target_spool_id,
+            "previous_spool_id": current_spool_id,
+            "active_spool_id": current_spool_id,
+            "sync_count": self._status.get("sync_count", 0) + 1,
+        }
+
+        if current_spool_id != target_spool_id:
+            active_spool_id = await self._set_active_spool_id(ws, target_spool_id)
+            status_updates["active_spool_id"] = active_spool_id
+            status_updates["last_switch_at"] = now
+            status_updates["switch_count"] = self._status.get("switch_count", 0) + 1
+            LOG.info(
+                "Active spool sync: tool=%s target_spool_id=%s previous_spool_id=%s new_spool_id=%s",
+                resolved_tool,
+                target_spool_id,
+                current_spool_id,
+                active_spool_id,
+            )
+        else:
+            status_updates["active_spool_id"] = current_spool_id
+
+        await self._publish_status(ws, **status_updates)
+
+        self._last_active_tool = resolved_tool
+        return {
+            "active_tool": resolved_tool,
+            "target_spool_id": target_spool_id,
+            "previous_spool_id": current_spool_id,
+            "active_spool_id": active_spool_id,
+            "count": mapping["count"],
+            "assignments": mapping["assignments"],
+            "slots": mapping["slots"],
+        }
+
+    async def _handle_status_update(self, ws, message: dict[str, Any]) -> None:
+        if message.get("method") != "notify_status_update":
+            return
+
+        params = message.get("params")
+        if not isinstance(params, list) or not params:
+            return
+        status = params[0]
+        if not isinstance(status, dict):
+            return
+        toolhead = status.get("toolhead")
+        if not isinstance(toolhead, dict) or "extruder" not in toolhead:
+            return
+
+        extruder = toolhead.get("extruder")
+        active_tool = str(extruder).strip() if extruder is not None else None
+        if not active_tool:
+            return
+        if active_tool == self._last_active_tool:
+            return
+
+        try:
+            await self._sync_active_spool_from_mapping(ws, active_tool=active_tool)
+        except Exception as exc:
+            LOG.warning("Automatic active spool sync failed for tool %s: %s", active_tool, exc)
+            try:
+                await self._publish_status(
+                    ws,
+                    connected=True,
+                    last_seen_at=utc_now_iso(),
+                    active_tool=active_tool,
+                    last_error=str(exc),
+                    last_error_at=utc_now_iso(),
+                )
+            except Exception as status_exc:
+                LOG.debug("Moonraker agent status update failed after sync error: %s", status_exc)
+
     async def _show_fallback_mapping(self, ws) -> dict[str, Any]:
         mapping = await self._get_fallback_mapping(ws)
         lines = ["Spool Tag Writer fallback mapping:"]
@@ -251,6 +431,10 @@ class MoonrakerAgent:
         return mapping
 
     async def _handle_message(self, ws, message: dict[str, Any]) -> None:
+        if message.get("method") == "notify_status_update":
+            await self._handle_status_update(ws, message)
+            return
+
         method = message.get("method")
         if method == self.settings.moonraker_show_mapping_agent_method or method == self.settings.moonraker_show_mapping_remote_method:
             msg_id = message.get("id")
@@ -325,6 +509,7 @@ class MoonrakerAgent:
 
     async def run_forever(self) -> None:
         while True:
+            heartbeat_task: asyncio.Task[None] | None = None
             try:
                 async with websockets.connect(
                     self.settings.moonraker_ws_url,
@@ -334,7 +519,19 @@ class MoonrakerAgent:
                     max_size=4 * 1024 * 1024,
                 ) as ws:
                     self._backlog.clear()
+                    self._last_active_tool = None
                     await self._identify_and_register(ws)
+                    await self._subscribe_toolhead(ws)
+                    await self._publish_status(
+                        ws,
+                        connected=True,
+                        connected_at=utc_now_iso(),
+                        last_seen_at=utc_now_iso(),
+                        last_error="",
+                        last_error_at="",
+                    )
+                    heartbeat_task = asyncio.create_task(self._heartbeat_loop(ws))
+                    await self._sync_active_spool_from_mapping(ws)
                     while True:
                         if self._backlog:
                             message = self._backlog.pop(0)
@@ -345,6 +542,11 @@ class MoonrakerAgent:
                 LOG.warning("Moonraker websocket disconnected: %s", exc)
             except Exception as exc:
                 LOG.warning("Moonraker agent error: %s", exc)
+            finally:
+                if heartbeat_task is not None:
+                    heartbeat_task.cancel()
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await heartbeat_task
             await asyncio.sleep(2)
 
     async def close(self) -> None:

@@ -5,6 +5,7 @@ import AppHeader from "./components/AppHeader.vue";
 import InfoBoxStat from "./components/InfoBoxStat.vue";
 import AppSidebar from "./components/AppSidebar.vue";
 import ExtruderMappingCard from "./components/ExtruderMappingCard.vue";
+import MoonrakerSyncCard from "./components/MoonrakerSyncCard.vue";
 import PreviewCard from "./components/PreviewCard.vue";
 import PrusamentImportCard from "./components/PrusamentImportCard.vue";
 import ResultsCard from "./components/ResultsCard.vue";
@@ -21,6 +22,7 @@ const ACTIVE_SCREEN_STORAGE_KEY = "spool-tag-writer.active-screen";
 const EXTRUDER_MAPPING_STORAGE_KEY = "spool-tag-writer.extruder-mapping";
 const DEFAULT_EXTRUDER_COUNT = 4;
 const DEFAULT_PRINTER_RFID_CHANNEL = 0;
+const MOONRAKER_STATUS_REFRESH_MS = 5000;
 const SCREEN_LABELS = {
   extruders: "Extruder Mapping",
   "tag-tools": "Tag Tools",
@@ -148,6 +150,33 @@ const webNfc = reactive({
   result: null,
 });
 
+const createEmptyAgentStatus = () => ({
+  online: false,
+  stale: false,
+  connected: false,
+  connectedAt: "",
+  lastSeenAt: "",
+  lastSyncAt: "",
+  lastSwitchAt: "",
+  lastError: "",
+  lastErrorAt: "",
+  activeTool: "",
+  targetSpoolId: null,
+  previousSpoolId: null,
+  activeSpoolId: null,
+  syncCount: 0,
+  switchCount: 0,
+});
+
+const moonrakerStatus = reactive({
+  activeTool: "",
+  activeSpoolId: null,
+  mappedSpoolId: null,
+  syncOk: false,
+  spoolmanConnected: false,
+  agent: createEmptyAgentStatus(),
+});
+
 const printerRfid = reactive({
   channel: DEFAULT_PRINTER_RFID_CHANNEL,
   status: "",
@@ -160,6 +189,28 @@ const selectedSpool = computed(() =>
   spools.value.find((spool) => String(spool.id) === String(selectedSpoolId.value)) || null,
 );
 const selectedSpoolLabel = computed(() => formatSpoolLabel(selectedSpool.value));
+const formatToolLabel = (toolName) => {
+  const normalized = String(toolName || "").trim();
+  if (!normalized) {
+    return "Tool —";
+  }
+  if (normalized === "extruder") {
+    return "Tool T0";
+  }
+  const match = normalized.match(/^extruder(\d+)$/);
+  if (match) {
+    return `Tool T${match[1]}`;
+  }
+  return `Tool ${normalized}`;
+};
+const moonrakerToolLabel = computed(() => formatToolLabel(moonrakerStatus.activeTool));
+const moonrakerActiveSpoolLabel = computed(() => {
+  if (moonrakerStatus.activeSpoolId) {
+    return `Active #${moonrakerStatus.activeSpoolId}`;
+  }
+  return "Active —";
+});
+const moonrakerHeaderSyncOk = computed(() => moonrakerStatus.agent.online && moonrakerStatus.syncOk);
 const printerRfidSelectedSpool = computed(() =>
   spools.value.find((spool) => String(spool.id) === String(printerRfid.selectedSpoolId)) || null,
 );
@@ -514,18 +565,47 @@ const refreshSpools = async ({ preferredSpoolId } = {}) => {
   await loadDefaultsForSpool(nextSpool.id);
 };
 
+const applyMoonrakerStatus = (status) => {
+  moonrakerStatus.activeTool = String(status?.active_tool || "");
+  moonrakerStatus.activeSpoolId = status?.active_spool_id ?? null;
+  moonrakerStatus.mappedSpoolId = status?.mapped_spool_id ?? null;
+  moonrakerStatus.syncOk = Boolean(status?.sync_ok);
+  moonrakerStatus.spoolmanConnected = Boolean(status?.spoolman_connected);
+
+  const agentStatus = status?.agent_status || {};
+  moonrakerStatus.agent.online = Boolean(agentStatus.online);
+  moonrakerStatus.agent.stale = Boolean(agentStatus.stale);
+  moonrakerStatus.agent.connected = Boolean(agentStatus.connected);
+  moonrakerStatus.agent.connectedAt = String(agentStatus.connected_at || "");
+  moonrakerStatus.agent.lastSeenAt = String(agentStatus.last_seen_at || "");
+  moonrakerStatus.agent.lastSyncAt = String(agentStatus.last_sync_at || "");
+  moonrakerStatus.agent.lastSwitchAt = String(agentStatus.last_switch_at || "");
+  moonrakerStatus.agent.lastError = String(agentStatus.last_error || "");
+  moonrakerStatus.agent.lastErrorAt = String(agentStatus.last_error_at || "");
+  moonrakerStatus.agent.activeTool = String(agentStatus.active_tool || "");
+  moonrakerStatus.agent.targetSpoolId = agentStatus.target_spool_id ?? null;
+  moonrakerStatus.agent.previousSpoolId = agentStatus.previous_spool_id ?? null;
+  moonrakerStatus.agent.activeSpoolId = agentStatus.active_spool_id ?? null;
+  moonrakerStatus.agent.syncCount = Number(agentStatus.sync_count || 0);
+  moonrakerStatus.agent.switchCount = Number(agentStatus.switch_count || 0);
+};
+
 const initialize = async () => {
   loading.initializing = true;
   clearAppAlert();
 
   try {
-    const [nextUiContext, spoolList, remoteExtruderMapping] = await Promise.all([
+    const [nextUiContext, spoolList, remoteExtruderMapping, moonrakerSyncStatus] = await Promise.all([
       api.getUiContext(),
       api.listSpools(),
       api.getExtruderMapping().catch(() => null),
+      api.getMoonrakerSpoolSyncStatus().catch(() => null),
     ]);
     uiContext.value = nextUiContext;
     spools.value = spoolList;
+    if (moonrakerSyncStatus) {
+      applyMoonrakerStatus(moonrakerSyncStatus);
+    }
 
     const remoteMapping = remoteExtruderMapping ? normalizeExtruderMapping(remoteExtruderMapping) : null;
     if (remoteMapping && (!hasExtruderMappingEntries(remoteMapping) && hasExtruderMappingEntries(storedExtruderMapping))) {
@@ -545,6 +625,15 @@ const initialize = async () => {
     setAppAlert(error.message || "Failed to initialize the dashboard.");
   } finally {
     loading.initializing = false;
+  }
+};
+
+const refreshMoonrakerStatus = async () => {
+  try {
+    const status = await api.getMoonrakerSpoolSyncStatus();
+    applyMoonrakerStatus(status);
+  } catch {
+    applyMoonrakerStatus(null);
   }
 };
 
@@ -798,6 +887,7 @@ const runWebNfcWrite = async () => {
 };
 
 let stopSystemThemeWatcher = () => {};
+let moonrakerStatusTimer = 0;
 
 onMounted(() => {
   resolvedTheme.value = applyTheme(theme.value);
@@ -807,10 +897,19 @@ onMounted(() => {
     }
   });
   initialize();
+  if (typeof window !== "undefined") {
+    moonrakerStatusTimer = window.setInterval(() => {
+      void refreshMoonrakerStatus();
+    }, MOONRAKER_STATUS_REFRESH_MS);
+  }
 });
 
 onBeforeUnmount(() => {
   stopSystemThemeWatcher();
+  if (typeof window !== "undefined" && moonrakerStatusTimer) {
+    window.clearInterval(moonrakerStatusTimer);
+    moonrakerStatusTimer = 0;
+  }
 });
 </script>
 
@@ -820,6 +919,9 @@ onBeforeUnmount(() => {
       :ui-context="uiContext"
       :active-screen-label="activeScreenLabel"
       :active-spool-label="selectedSpoolLabel"
+      :moonraker-tool-label="moonrakerToolLabel"
+      :moonraker-active-spool-label="moonrakerActiveSpoolLabel"
+      :moonraker-sync-ok="moonrakerHeaderSyncOk"
       :theme="theme"
       :resolved-theme="resolvedTheme"
       @change-theme="syncTheme"
@@ -919,6 +1021,10 @@ onBeforeUnmount(() => {
                   @load-from-u1="loadExtruderSlotFromU1"
                   @open-tag-tools="openTagToolsForSpool"
                 />
+              </div>
+
+              <div class="col-12">
+                <MoonrakerSyncCard :status="moonrakerStatus" />
               </div>
             </div>
           </template>

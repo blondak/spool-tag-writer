@@ -93,6 +93,10 @@ export class SpoolTagWriterApi {
     });
   }
 
+  getMoonrakerSpoolSyncStatus() {
+    return this.request("/api/moonraker/spool-sync-status");
+  }
+
   getPrinterRfidChannel(channel, { refresh = true } = {}) {
     return this.request(`/api/printer/rfid/channels/${encodeURIComponent(channel)}`, {
       params: { refresh },
