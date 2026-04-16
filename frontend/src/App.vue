@@ -770,7 +770,7 @@ const assignPrinterRfidLotNr = async () => {
       : "";
 
     setPrinterRfidStatus(
-      `Saved UID ${response.lot_nr || response.rfid_channel?.card_uid || ""} to lot_nr of spool #${targetSpoolId}.${clearedMessage}`,
+      `Saved UID ${response.assigned_uid || response.rfid_channel?.card_uid || ""} to lot_nr of spool #${targetSpoolId}.${clearedMessage}`,
       "success",
     );
   } catch (error) {

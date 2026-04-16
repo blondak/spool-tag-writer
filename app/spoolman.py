@@ -160,19 +160,24 @@ class SpoolmanClient:
         if not normalized_lot_nr:
             return []
 
-        spools = await self.list_spools(params={"allow_archived": "true"})
+        spools = await self.list_spools(
+            params={
+                "allow_archived": "true",
+                "lot_nr": normalized_lot_nr,
+            }
+        )
         matches: list[dict[str, Any]] = []
         for spool in spools:
             if not isinstance(spool, dict):
                 continue
             if exclude_spool_id is not None and str(spool.get("id")) == str(exclude_spool_id):
                 continue
-            if self._normalize_lot_nr(spool.get("lot_nr")) == normalized_lot_nr:
+            if normalized_lot_nr in self._split_lot_nr_tokens(spool.get("lot_nr")):
                 matches.append(spool)
         return matches
 
     async def update_spool_lot_nr(self, spool_id: int, lot_nr: str | None) -> dict[str, Any]:
-        normalized_lot_nr = self._normalize_lot_nr(lot_nr) or None
+        normalized_lot_nr = self._join_lot_nr_tokens(self._split_lot_nr_tokens(lot_nr)) or None
         data = await self._first_patch_ok(
             [f"/api/v1/spool/{spool_id}", f"/api/v1/spools/{spool_id}"],
             {"lot_nr": normalized_lot_nr},
@@ -180,6 +185,26 @@ class SpoolmanClient:
         if isinstance(data, dict):
             return data
         raise RuntimeError("Unexpected spool update response format from Spoolman.")
+
+    @classmethod
+    def add_lot_nr_token(cls, current_lot_nr: Any, token: str) -> str | None:
+        normalized_token = cls._normalize_lot_nr(token)
+        if not normalized_token:
+            return cls._join_lot_nr_tokens(cls._split_lot_nr_tokens(current_lot_nr)) or None
+
+        tokens = cls._split_lot_nr_tokens(current_lot_nr)
+        if normalized_token not in tokens:
+            tokens.append(normalized_token)
+        return cls._join_lot_nr_tokens(tokens) or None
+
+    @classmethod
+    def remove_lot_nr_token(cls, current_lot_nr: Any, token: str) -> str | None:
+        normalized_token = cls._normalize_lot_nr(token)
+        if not normalized_token:
+            return cls._join_lot_nr_tokens(cls._split_lot_nr_tokens(current_lot_nr)) or None
+
+        tokens = [item for item in cls._split_lot_nr_tokens(current_lot_nr) if item != normalized_token]
+        return cls._join_lot_nr_tokens(tokens) or None
 
     async def list_vendors(self) -> list[dict[str, Any]]:
         data = await self._first_ok(["/api/v1/vendor", "/api/v1/vendors"])
@@ -213,6 +238,26 @@ class SpoolmanClient:
         if normalized and all(char in "0123456789abcdef" for char in normalized):
             return f"0x{normalized}"
         return text
+
+    @classmethod
+    def _split_lot_nr_tokens(cls, value: Any) -> list[str]:
+        if value is None:
+            return []
+
+        raw_tokens = str(value).split(",")
+        tokens: list[str] = []
+        seen: set[str] = set()
+        for raw_token in raw_tokens:
+            normalized = cls._normalize_lot_nr(raw_token)
+            if not normalized or normalized in seen:
+                continue
+            seen.add(normalized)
+            tokens.append(normalized)
+        return tokens
+
+    @staticmethod
+    def _join_lot_nr_tokens(tokens: list[str]) -> str:
+        return ",".join(str(token).strip() for token in tokens if str(token).strip())
 
     @staticmethod
     def _resolve_import_external_id(imported: dict[str, Any]) -> str:

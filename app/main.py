@@ -348,15 +348,25 @@ async def api_assign_spool_lot_nr_from_printer_rfid(
                 existing_id = int(existing_spool.get("id"))
             except (TypeError, ValueError):
                 continue
-            cleared = await request.app.state.spoolman.update_spool_lot_nr(existing_id, None)
+            cleared_lot_nr = request.app.state.spoolman.remove_lot_nr_token(
+                existing_spool.get("lot_nr"),
+                lot_nr,
+            )
+            cleared = await request.app.state.spoolman.update_spool_lot_nr(existing_id, cleared_lot_nr)
             cleared_spools.append(_serialize_spool_for_ui(cleared))
 
-        updated_spool = await request.app.state.spoolman.update_spool_lot_nr(spool_id, lot_nr)
+        current_spool = await request.app.state.spoolman.get_spool(spool_id)
+        updated_lot_nr = request.app.state.spoolman.add_lot_nr_token(
+            current_spool.get("lot_nr"),
+            lot_nr,
+        )
+        updated_spool = await request.app.state.spoolman.update_spool_lot_nr(spool_id, updated_lot_nr)
         return {
             "spool": _serialize_spool_for_ui(updated_spool),
             "cleared_spools": cleared_spools,
             "rfid_channel": rfid_channel,
-            "lot_nr": lot_nr,
+            "lot_nr": updated_lot_nr,
+            "assigned_uid": lot_nr,
         }
     except RuntimeError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
