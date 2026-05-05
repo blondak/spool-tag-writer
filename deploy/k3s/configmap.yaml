@@ -9,6 +9,8 @@ data:
   LOCAL_NFC_ENABLED: "false"
   SPOOLMAN_URL: "auto"
   SPOOLMAN_API_HEADER: "X-API-Key"
+  SPOOLMAN_SSL_VERIFY: "true"
+  SPOOLMAN_CA_BUNDLE: ""
   MOONRAKER_HTTP_URL: "http://u1-printer.example.local:7125"
   MOONRAKER_WS_URL: "ws://u1-printer.example.local:7125/websocket"
   MOONRAKER_CLIENT_NAME: "spool-tag-writer"

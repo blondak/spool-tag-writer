@@ -113,6 +113,7 @@ The file includes:
 - `Moonraker` should typically stay on `ws://127.0.0.1:7125/websocket`.
 - `Spoolman` can run on the printer or elsewhere on the network.
 - `SPOOLMAN_URL=auto` tells the app to resolve the URL from Moonraker `[spoolman]`.
+- For Spoolman behind custom TLS, keep `SPOOLMAN_SSL_VERIFY=true` and set `SPOOLMAN_CA_BUNDLE=/path/to/internal-ca.pem`.
 - `LOCAL_NFC_ENABLED=false` hides and disables local NFC reader write/read flows.
 - The default container image is intended for U1 RFID/Moonraker operation and does not include local PC/SC NFC dependencies.
 - `GitHub Actions` builds the frontend on pushes and pull requests; tag builds also publish the packaged U1 release assets.

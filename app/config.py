@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     spoolman_url: str = "http://localhost:7912"
     spoolman_api_key: str | None = None
     spoolman_api_header: str = "X-API-Key"
+    spoolman_ssl_verify: bool = True
+    spoolman_ca_bundle: str | None = None
 
     local_nfc_enabled: bool = True
     nfc_backend: str = "pcsc"

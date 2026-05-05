@@ -29,9 +29,18 @@ spec:
             - secretRef:
                 name: spool-tag-writer-secret
                 optional: true
+          volumeMounts:
+            - name: spool-tag-writer-tls
+              mountPath: /etc/spool-tag-writer/tls
+              readOnly: true
           resources:
             requests:
               cpu: 25m
               memory: 96Mi
             limits:
               memory: 384Mi
+      volumes:
+        - name: spool-tag-writer-tls
+          secret:
+            secretName: spool-tag-writer-tls
+            optional: true

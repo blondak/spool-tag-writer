@@ -41,6 +41,7 @@ Edit `.env`:
 - keep `MOONRAKER_WS_URL=ws://127.0.0.1:7125/websocket`
 - keep `LOCAL_NFC_ENABLED=false` unless you really want local NFC tag write/read tools in the UI
 - keep `NFC_BACKEND=mock` unless you really attach an external PC/SC reader to the printer
+- if Spoolman uses a custom CA, copy the CA PEM to the printer and set `SPOOLMAN_CA_BUNDLE=/path/to/internal-ca.pem`
 
 ## Bootstrap install
 

@@ -49,17 +49,30 @@ class SpoolmanClient:
         headers: dict[str, str] = {}
         if settings.spoolman_api_key:
             headers[settings.spoolman_api_header] = settings.spoolman_api_key
+        ca_bundle = (settings.spoolman_ca_bundle or "").strip()
+        verify: bool | str = ca_bundle if ca_bundle else settings.spoolman_ssl_verify
         self._client = httpx.AsyncClient(
             base_url=settings.spoolman_url.rstrip("/"),
             timeout=settings.request_timeout_seconds,
             headers=headers,
+            verify=verify,
         )
 
     async def close(self) -> None:
         await self._client.aclose()
 
+    @staticmethod
+    def _describe_http_error(exc: httpx.HTTPError) -> str:
+        message = str(exc).strip() or exc.__class__.__name__
+        if "certificate verify failed" in message.lower() or "CERTIFICATE_VERIFY_FAILED" in message:
+            return (
+                f"{message}. Configure SPOOLMAN_CA_BUNDLE with the internal CA certificate PEM, "
+                "or set SPOOLMAN_SSL_VERIFY=false only for temporary testing."
+            )
+        return message
+
     async def _first_ok(self, paths: list[str], *, params: dict[str, Any] | None = None) -> Any:
-        last_exc: Exception | None = None
+        last_exc: httpx.HTTPError | None = None
         for path in paths:
             try:
                 response = await self._client.get(path, params=params)
@@ -70,7 +83,7 @@ class SpoolmanClient:
             except httpx.HTTPError as exc:
                 last_exc = exc
         if last_exc:
-            raise RuntimeError(f"Spoolman request failed: {last_exc}") from last_exc
+            raise RuntimeError(f"Spoolman request failed: {self._describe_http_error(last_exc)}") from last_exc
         raise RuntimeError("No compatible Spoolman endpoint found.")
 
     async def _first_post_ok(self, paths: list[str], payloads: list[dict[str, Any]]) -> Any:
@@ -92,7 +105,7 @@ class SpoolmanClient:
                             f"Payload: {payload}"
                         )
                     else:
-                        last_error_text = f"Spoolman request failed: {exc}. Payload: {payload}"
+                        last_error_text = f"Spoolman request failed: {self._describe_http_error(exc)}. Payload: {payload}"
         if last_error_text:
             raise RuntimeError(last_error_text)
         raise RuntimeError("No compatible Spoolman endpoint found.")
@@ -115,7 +128,7 @@ class SpoolmanClient:
                         f"Payload: {payload}"
                     )
                 else:
-                    last_error_text = f"Spoolman request failed: {exc}. Payload: {payload}"
+                    last_error_text = f"Spoolman request failed: {self._describe_http_error(exc)}. Payload: {payload}"
         if last_error_text:
             raise RuntimeError(last_error_text)
         raise RuntimeError("No compatible Spoolman endpoint found.")

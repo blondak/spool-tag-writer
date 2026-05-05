@@ -19,6 +19,8 @@ Edit [configmap.yaml](configmap.yaml):
 - set `MOONRAKER_WS_URL`
 - set `MOONRAKER_CLIENT_URL`
 - keep `LOCAL_NFC_ENABLED=false`
+- keep `SPOOLMAN_SSL_VERIFY=true`
+- set `SPOOLMAN_CA_BUNDLE=/etc/spool-tag-writer/tls/spoolman-ca.pem` if Spoolman uses a private CA
 
 The published container image does not include `pyscard` or PC/SC packages. It is meant for U1 RFID over Moonraker, not direct USB NFC reader access inside the pod.
 
@@ -32,11 +34,24 @@ vi /tmp/spool-tag-writer-secret.yaml
 kubectl apply -f /tmp/spool-tag-writer-secret.yaml
 ```
 
+If Spoolman uses a certificate signed by an internal CA, create a TLS CA secret from [tls-secret.example.yaml](tls-secret.example.yaml):
+
+```bash
+cp deploy/k3s/tls-secret.example.yaml /tmp/spool-tag-writer-tls.yaml
+vi /tmp/spool-tag-writer-tls.yaml
+kubectl apply -f /tmp/spool-tag-writer-tls.yaml
+```
+
+Then set `SPOOLMAN_CA_BUNDLE=/etc/spool-tag-writer/tls/spoolman-ca.pem` in [configmap.yaml](configmap.yaml). Avoid `SPOOLMAN_SSL_VERIFY=false` except for temporary troubleshooting.
+
 ## Deploy
+
+With API key or TLS CA secrets, apply only the secret files you actually use:
 
 ```bash
 kubectl apply -f deploy/k3s/namespace.yaml
 kubectl apply -f /tmp/spool-tag-writer-secret.yaml
+kubectl apply -f /tmp/spool-tag-writer-tls.yaml
 kubectl apply -k deploy/k3s
 ```
 
