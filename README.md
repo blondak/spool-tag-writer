@@ -90,6 +90,8 @@ Container images are published to:
 ghcr.io/blondak/spool-tag-writer
 ```
 
+Images are published as a multi-arch manifest for `linux/amd64`, `linux/arm64`, and `linux/arm/v7`, so Raspberry Pi 4/5 nodes can pull the same tag on 64-bit or 32-bit Raspberry Pi OS.
+
 Example manifests are in [deploy/k3s](deploy/k3s).
 
 The published container image intentionally excludes `pyscard` and PC/SC packages, so direct USB NFC reader access is disabled in the cluster image. Use U1 RFID over Moonraker, or run a separate reader-side bridge if a physical NFC reader must stay on another host.

@@ -6,6 +6,8 @@ The same container image is used for both processes:
 - `spool-tag-writer-web` serves FastAPI and the built Vue UI.
 - `spool-tag-writer-agent` connects to Moonraker over websocket and performs active spool sync.
 
+Published images support `linux/amd64`, `linux/arm64`, and `linux/arm/v7`. On Raspberry Pi 4/5 k3s nodes, Kubernetes pulls the matching variant automatically from the same image tag.
+
 The agent must run as a single replica. Running multiple agents can race on the same Moonraker active spool state.
 
 No persistent volume is required for the default deployment. Extruder fallback mapping is stored in Moonraker database, and spool metadata remains in Spoolman. If the pod restarts, the app reloads state from those services.
