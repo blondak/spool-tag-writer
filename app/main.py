@@ -35,7 +35,7 @@ async def lifespan(app: FastAPI):
     app.state.settings = settings
     app.state.moonraker = MoonrakerClient(settings)
     app.state.spoolman = SpoolmanClient(settings)
-    app.state.nfc = build_nfc_backend(settings)
+    app.state.nfc = build_nfc_backend(settings) if settings.local_nfc_enabled else None
     yield
     await app.state.moonraker.close()
     await app.state.spoolman.close()
@@ -199,13 +199,20 @@ async def _build_override_defaults(request: Request, spool_id: int) -> dict[str,
 async def _write_preview_to_tag(
     request: Request, preview_data: dict[str, Any]
 ) -> dict[str, Any]:
-    write_result = request.app.state.nfc.write_openspool_payload(preview_data["payload_json"])
-    read_result = request.app.state.nfc.read_current_payload()
+    nfc = _get_local_nfc_backend(request)
+    write_result = nfc.write_openspool_payload(preview_data["payload_json"])
+    read_result = nfc.read_current_payload()
     return {
         "preview": preview_data,
         "write_result": write_result,
         "readback": read_result,
     }
+
+
+def _get_local_nfc_backend(request: Request):
+    if not request.app.state.settings.local_nfc_enabled or request.app.state.nfc is None:
+        raise NfcError("Local NFC reader support is disabled.")
+    return request.app.state.nfc
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -238,10 +245,16 @@ async def index():
 async def api_ui_context(request: Request):
     settings: Settings = request.app.state.settings
     return {
+        "local_nfc_enabled": settings.local_nfc_enabled,
         "nfc_backend": settings.nfc_backend,
         "nfc_reader_name": settings.nfc_reader_name,
         "spoolman_url": settings.spoolman_url,
     }
+
+
+@app.get("/api/health")
+async def api_health():
+    return {"status": "ok"}
 
 
 @app.get("/api/spools")
@@ -550,7 +563,7 @@ async def api_write_with_overrides(
 @app.get("/api/tag/read")
 async def api_read_tag(request: Request):
     try:
-        return request.app.state.nfc.read_current_payload()
+        return _get_local_nfc_backend(request).read_current_payload()
     except (NfcError, RuntimeError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=_describe_exception(exc)) from exc
     except Exception as exc:

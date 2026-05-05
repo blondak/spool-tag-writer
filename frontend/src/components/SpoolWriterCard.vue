@@ -39,6 +39,10 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  localNfcEnabled: {
+    type: Boolean,
+    default: true,
+  },
 });
 
 const emit = defineEmits([
@@ -73,7 +77,7 @@ const updateOverride = (key, value) => {
     <div class="card-header">
       <h3 class="card-title">
         <i class="bi bi-upc-scan me-2"></i>
-        NFC Tag Writer
+        {{ localNfcEnabled ? "NFC Tag Writer" : "Payload Builder" }}
       </h3>
       <div class="card-tools">
         <span class="badge text-bg-light">
@@ -102,7 +106,9 @@ const updateOverride = (key, value) => {
         <div class="info-box-content">
           <span class="info-box-text">Selected Spool</span>
           <span class="info-box-number">{{ selectedSpoolLabel || "No spool selected" }}</span>
-          <span class="text-body-secondary small">Select a spool, tune the payload, then preview or write through the configured reader.</span>
+          <span class="text-body-secondary small">
+            {{ localNfcEnabled ? "Select a spool, tune the payload, then preview or write through the configured reader." : "Select a spool and tune the payload for preview or browser-based NFC workflows." }}
+          </span>
         </div>
       </div>
 
@@ -146,6 +152,7 @@ const updateOverride = (key, value) => {
         </button>
 
         <button
+          v-if="localNfcEnabled"
           type="button"
           class="btn btn-primary btn-icon"
           :disabled="busy || !selectedSpoolId"
@@ -156,6 +163,7 @@ const updateOverride = (key, value) => {
         </button>
 
         <button
+          v-if="localNfcEnabled"
           type="button"
           class="btn btn-secondary btn-icon"
           :disabled="busy"

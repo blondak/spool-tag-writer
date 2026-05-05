@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: spool-tag-writer-config
+  namespace: spool-tag-writer
+data:
+  APP_HOST: "0.0.0.0"
+  APP_PORT: "8080"
+  LOCAL_NFC_ENABLED: "false"
+  SPOOLMAN_URL: "auto"
+  SPOOLMAN_API_HEADER: "X-API-Key"
+  MOONRAKER_HTTP_URL: "http://u1-printer.example.local:7125"
+  MOONRAKER_WS_URL: "ws://u1-printer.example.local:7125/websocket"
+  MOONRAKER_CLIENT_NAME: "spool-tag-writer"
+  MOONRAKER_CLIENT_VERSION: "0.1.0"
+  MOONRAKER_CLIENT_URL: "http://spool-tag-writer.example.local"
+  MOONRAKER_AGENT_METHOD: "spool_tag_writer.write_spool_tag"
+  MOONRAKER_REMOTE_METHOD: "spool_tag_writer_write_spool_tag"
+  MOONRAKER_SHOW_MAPPING_AGENT_METHOD: "spool_tag_writer.show_fallback_mapping"
+  MOONRAKER_SHOW_MAPPING_REMOTE_METHOD: "spool_tag_writer_show_fallback_mapping"
+  REQUEST_TIMEOUT_SECONDS: "10"

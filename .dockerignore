@@ -1,0 +1,11 @@
+.codex/
+.env
+.git/
+.github/
+.venv/
+README-local.md
+codex-resume
+dist/
+node_modules/
+__pycache__/
+*.py[cod]

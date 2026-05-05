@@ -83,14 +83,14 @@ const emit = defineEmits(["navigate"]);
             </a>
           </li>
 
-          <li class="nav-header">STATION</li>
-          <li class="nav-item">
+          <li v-if="uiContext.local_nfc_enabled" class="nav-header">STATION</li>
+          <li v-if="uiContext.local_nfc_enabled" class="nav-item">
             <a href="#" class="nav-link" @click.prevent="emit('navigate', activeScreen)">
               <i class="nav-icon bi bi-broadcast-pin"></i>
               <p>{{ uiContext.nfc_reader_name || "Reader pending" }}</p>
             </a>
           </li>
-          <li class="nav-item">
+          <li v-if="uiContext.local_nfc_enabled" class="nav-item">
             <a href="#" class="nav-link" @click.prevent="emit('navigate', activeScreen)">
               <i class="nav-icon bi bi-hdd-stack"></i>
               <p>{{ uiContext.nfc_backend || "unknown" }} backend</p>

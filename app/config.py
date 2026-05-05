@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     spoolman_api_key: str | None = None
     spoolman_api_header: str = "X-API-Key"
 
+    local_nfc_enabled: bool = True
     nfc_backend: str = "pcsc"
     nfc_reader_name: str = "ACR122"
     ntag215_start_page: int = 4

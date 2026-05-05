@@ -33,7 +33,7 @@ class MoonrakerAgent:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
         self.spoolman = SpoolmanClient(settings)
-        self.nfc = build_nfc_backend(settings)
+        self.nfc = build_nfc_backend(settings) if settings.local_nfc_enabled else None
         self._rpc_id = 0
         self._backlog: list[dict[str, Any]] = []
         self._last_active_tool: str | None = None
@@ -243,6 +243,8 @@ class MoonrakerAgent:
     async def _write_tag(
         self, spool_id: int, overrides: dict[str, Any] | None = None
     ) -> dict[str, Any]:
+        if self.nfc is None:
+            raise RuntimeError("Local NFC reader support is disabled.")
         spool = await self.spoolman.get_spool(spool_id)
         payload = build_openspool_payload(spool, self.settings.spoolman_url)
         payload = apply_openspool_overrides(payload, overrides)
@@ -491,20 +493,23 @@ class MoonrakerAgent:
         if self.settings.moonraker_api_key:
             params["api_key"] = self.settings.moonraker_api_key
         await self._rpc_call(ws, "server.connection.identify", params)
-        await self._rpc_call(
-            ws,
-            "connection.register_remote_method",
-            {"method_name": self.settings.moonraker_remote_method},
-        )
+        registered_methods = []
+        if self.settings.local_nfc_enabled:
+            await self._rpc_call(
+                ws,
+                "connection.register_remote_method",
+                {"method_name": self.settings.moonraker_remote_method},
+            )
+            registered_methods.append(self.settings.moonraker_remote_method)
         await self._rpc_call(
             ws,
             "connection.register_remote_method",
             {"method_name": self.settings.moonraker_show_mapping_remote_method},
         )
+        registered_methods.append(self.settings.moonraker_show_mapping_remote_method)
         LOG.info(
-            "Connected to Moonraker, remote methods registered: %s, %s",
-            self.settings.moonraker_remote_method,
-            self.settings.moonraker_show_mapping_remote_method,
+            "Connected to Moonraker, remote methods registered: %s",
+            ", ".join(registered_methods),
         )
 
     async def run_forever(self) -> None:

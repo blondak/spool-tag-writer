@@ -63,7 +63,7 @@ const emit = defineEmits(["change-theme"]);
       </ul>
 
       <ul class="navbar-nav ms-auto align-items-center">
-        <li class="nav-item d-none d-sm-block">
+        <li v-if="uiContext.local_nfc_enabled" class="nav-item d-none d-sm-block">
           <span class="nav-link text-body-secondary">
             <i class="bi bi-cpu me-1"></i>
             {{ uiContext.nfc_backend || "unknown" }}
@@ -83,7 +83,7 @@ const emit = defineEmits(["change-theme"]);
             </span>
           </span>
         </li>
-        <li class="nav-item d-none d-lg-block">
+        <li v-if="uiContext.local_nfc_enabled" class="nav-item d-none d-lg-block">
           <span class="nav-link text-body-secondary">
             <i class="bi bi-broadcast-pin me-1"></i>
             {{ uiContext.nfc_reader_name || "reader pending" }}

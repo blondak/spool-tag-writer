@@ -39,6 +39,7 @@ cp examples/u1/.env.u1.example .env
 Edit `.env`:
 - keep `SPOOLMAN_URL=auto` to discover the URL from Moonraker `[spoolman]`
 - keep `MOONRAKER_WS_URL=ws://127.0.0.1:7125/websocket`
+- keep `LOCAL_NFC_ENABLED=false` unless you really want local NFC tag write/read tools in the UI
 - keep `NFC_BACKEND=mock` unless you really attach an external PC/SC reader to the printer
 
 ## Bootstrap install
@@ -120,6 +121,8 @@ Example macros are provided in [../printer_macro_spool_tag_writer.cfg](../printe
 The file includes:
 - `WRITE_SPOOL_TAG`
 - `SHOW_FALLBACK_MAPPING`
+
+`WRITE_SPOOL_TAG` requires `LOCAL_NFC_ENABLED=true` and a configured local or bridged NFC reader.
 
 `SHOW_FALLBACK_MAPPING` calls the Moonraker agent and prints the current fallback mapping into the Klipper console, for example:
 

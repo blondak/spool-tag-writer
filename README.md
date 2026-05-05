@@ -4,7 +4,7 @@
 
 The application provides:
 - spool selection and extruder-to-spool mapping
-- OpenSpool tag preview, write, and readback tools
+- OpenSpool tag preview, with optional local NFC write/readback tools
 - Prusament import helpers
 - a Moonraker-side agent for printer integration
 
@@ -76,6 +76,26 @@ cd /home/lava/printer_data/apps/spool-tag-writer
 ./scripts/u1-update.sh --github-release <version>
 ```
 
+## Run in k3s
+
+The app can also run in a home k3s cluster. The recommended k3s mode is:
+- `LOCAL_NFC_ENABLED=false`
+- web and agent as separate deployments
+- exactly one agent replica
+- Moonraker and Spoolman reached over the LAN
+
+Container images are published to:
+
+```text
+ghcr.io/blondak/spool-tag-writer
+```
+
+Example manifests are in [deploy/k3s](deploy/k3s).
+
+The published container image intentionally excludes `pyscard` and PC/SC packages, so direct USB NFC reader access is disabled in the cluster image. Use U1 RFID over Moonraker, or run a separate reader-side bridge if a physical NFC reader must stay on another host.
+
+The default k3s deployment does not need a persistent volume: fallback mapping is stored in Moonraker database and spool data stays in Spoolman.
+
 ## Klipper macro
 
 Example Klipper macros are in [examples/printer_macro_spool_tag_writer.cfg](examples/printer_macro_spool_tag_writer.cfg).
@@ -91,7 +111,8 @@ The file includes:
 - `Moonraker` should typically stay on `ws://127.0.0.1:7125/websocket`.
 - `Spoolman` can run on the printer or elsewhere on the network.
 - `SPOOLMAN_URL=auto` tells the app to resolve the URL from Moonraker `[spoolman]`.
-- The NFC reader can be local to the printer or moved to another machine via a dedicated bridge service.
+- `LOCAL_NFC_ENABLED=false` hides and disables local NFC reader write/read flows.
+- The default container image is intended for U1 RFID/Moonraker operation and does not include local PC/SC NFC dependencies.
 - `GitHub Actions` builds the frontend on pushes and pull requests; tag builds also publish the packaged U1 release assets.
 
 For detailed printer deployment notes, see [examples/u1/README.md](examples/u1/README.md).

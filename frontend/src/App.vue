@@ -107,6 +107,7 @@ const activeScreen = ref(readStoredScreen());
 const storedExtruderMapping = readStoredExtruderMapping();
 
 const uiContext = ref({
+  local_nfc_enabled: true,
   nfc_backend: "",
   nfc_reader_name: "",
 });
@@ -236,11 +237,15 @@ const writerBusy = computed(
   () => loading.initializing || loading.defaults || loading.preview || loading.write || loading.read,
 );
 const activeTransport = computed(() => {
-  if (browserContext.webNfcAvailable && browserContext.secureContextOk) {
+  if (uiContext.value.local_nfc_enabled && browserContext.webNfcAvailable && browserContext.secureContextOk) {
     return "Reader + Web NFC";
   }
 
-  return "Reader only";
+  if (browserContext.webNfcAvailable && browserContext.secureContextOk) {
+    return "Web NFC";
+  }
+
+  return uiContext.value.local_nfc_enabled ? "Reader only" : "No local reader";
 });
 const previewSize = computed(() => (preview.value?.payload_size ? `${preview.value.payload_size} B` : "Not prepared"));
 const appAlertToneClass = computed(() => {
@@ -1122,6 +1127,7 @@ onBeforeUnmount(() => {
                   :preview-busy="loading.preview"
                   :write-busy="loading.write"
                   :read-busy="loading.read"
+                  :local-nfc-enabled="uiContext.local_nfc_enabled"
                   @update:selected-spool-id="handleSpoolSelection"
                   @update:overrides="handleOverridesUpdate"
                   @preview="runPreview"

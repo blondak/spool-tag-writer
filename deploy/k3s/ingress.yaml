@@ -1,0 +1,17 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: spool-tag-writer
+  namespace: spool-tag-writer
+spec:
+  rules:
+    - host: spool-tag-writer.example.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: spool-tag-writer-web
+                port:
+                  name: http
